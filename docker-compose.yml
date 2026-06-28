@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # MySQL 数据库（用于 Checkpoint 持久化）
+  mysql:
+    image: mysql:8.0
+    container_name: x-langgraph-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_DATABASE: x-langgraph
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI 应用
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: x-langgraph-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - CHECKPOINT_DB_HOST=mysql
+      - CHECKPOINT_DB_PORT=3306
+      - CHECKPOINT_DB_USER=root
+      - CHECKPOINT_DB_PASSWORD=123456
+      - CHECKPOINT_DB_NAME=x-langgraph
+    env_file:
+      - .env
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./examples:/app/examples:ro
+
+volumes:
+  mysql_data:

@@ -1,0 +1,9 @@
+{
+  "python_path": "src",
+  "dependencies": ["."],
+  "graphs": {
+    "agent_workflow": "./examples/agent_workflow.py:main",
+    "langgraph_platform": "./examples/langgraph_platform.py:graph"
+  },
+  "env": ".env"
+}
