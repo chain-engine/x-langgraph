@@ -6,6 +6,7 @@
 支持自动类型转换和验证。
 """
 
+import os
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,16 +14,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """
     配置类，使用 pydantic-settings 自动从环境变量加载配置
-
-    Features:
-    - 自动类型转换（str -> int, str -> bool 等）
-    - 支持 .env 文件
-    - 类型验证
-    - 默认值支持
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,
@@ -72,6 +67,12 @@ class Settings(BaseSettings):
     CHECKPOINT_DB_PASSWORD: str = Field(default="", description="Checkpoint 数据库密码")
     CHECKPOINT_DB_NAME: str = Field(default="x-langgraph", description="Checkpoint 数据库名称")
 
+    # ========== Redis 配置 ==========
+    REDIS_HOST: str = Field(default="localhost", description="Redis 主机")
+    REDIS_PORT: int = Field(default=6379, description="Redis 端口")
+    REDIS_PASSWORD: str = Field(default="", description="Redis 密码")
+    REDIS_DB: int = Field(default=0, description="Redis 数据库")
+
     # ========== API 服务配置 ==========
     API_HOST: str = Field(default="0.0.0.0", description="API 服务主机")
     API_PORT: int = Field(default=8000, description="API 服务端口")
@@ -90,7 +91,11 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=True, description="调试模式")
     STRUCTURED: bool = Field(default=False, description="结构化输出模式")
 
-    @field_validator("DB_PORT", "CHECKPOINT_DB_PORT", "API_PORT", mode="before")
+    # ========== 日志配置 ==========
+    LOG_LEVEL: str = Field(default="INFO", description="日志级别")
+    LOG_DIR: str = Field(default="logs", description="日志目录")
+
+    @field_validator("DB_PORT", "CHECKPOINT_DB_PORT", "API_PORT", "REDIS_PORT", mode="before")
     @classmethod
     def parse_int_field(cls, v):
         """将字符串转换为整数"""
@@ -179,6 +184,11 @@ class Settings(BaseSettings):
             f"{self.DB_NAME}"
         )
 
+    def get_redis_url(self) -> str:
+        """获取 Redis 连接 URL"""
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-# 创建全局配置实例
+
 settings: Settings = Settings()

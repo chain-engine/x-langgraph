@@ -7,15 +7,21 @@
 
 from typing import Any, Optional
 
-from models.base import Service
+from common.base import Service
+from repositories.workflow_repository import WorkflowRepository
 from core.logger import logger
 
 
 class ApprovalService(Service):
     """审批服务"""
 
-    def __init__(self):
-        """初始化审批服务"""
+    def __init__(self, repository: Optional[WorkflowRepository] = None):
+        """初始化审批服务
+
+        Args:
+            repository: 工作流仓库实例
+        """
+        self._repository = repository or WorkflowRepository()
         logger.info("Approval service initialized")
 
     async def get_by_id(self, entity_id: str) -> Optional[Any]:
@@ -70,6 +76,7 @@ class ApprovalService(Service):
             bool: 是否删除成功
         """
         logger.info(f"Delete approval: {entity_id}")
+        await self._repository.delete_instance(entity_id)
         return True
 
     async def list_all(
@@ -78,7 +85,7 @@ class ApprovalService(Service):
         page_size: int = 20,
         filters: Optional[dict[str, Any]] = None,
         sort_by: Optional[str] = None,
-        sort_order: Optional[str] = None
+        sort_order: Optional[str] = None,
     ) -> dict[str, Any]:
         """查询所有审批记录
 
@@ -92,7 +99,9 @@ class ApprovalService(Service):
         Returns:
             dict[str, Any]: 分页数据
         """
-        return {"data": [], "total": 0, "page": page, "page_size": page_size}
+        offset = (page - 1) * page_size
+        data = await self._repository.list_states(limit=page_size, offset=offset)
+        return {"data": data, "total": len(data), "page": page, "page_size": page_size}
 
     async def resume_workflow(self, session_id: str, approved: bool, comments: str = "") -> dict[str, Any]:
         """

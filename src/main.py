@@ -8,7 +8,6 @@
 import uuid
 import uvicorn
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,8 +15,12 @@ from fastapi.responses import JSONResponse
 
 from core.config import settings
 from core.logger import logger
-from constants.schemas import HealthResponse
-from api.routes import chat, approval
+from core.middleware import setup_middleware
+from core.container import container
+from api.router import api_router
+from services.chat_service import ChatService
+from services.approval_service import ApprovalService
+from repositories.workflow_repository import WorkflowRepository
 
 
 async def verify_api_key(request: Request):
@@ -27,7 +30,7 @@ async def verify_api_key(request: Request):
     检查请求头中的 X-API-Key 是否有效
     """
     api_key = request.headers.get("X-API-Key")
-    
+
     if settings.API_KEY and api_key != settings.API_KEY:
         raise HTTPException(
             status_code=401,
@@ -46,14 +49,14 @@ async def rate_limit(request: Request):
     限制每个 IP 每分钟最多 60 次请求
     """
     client_ip = request.client.host
-    
+
     if client_ip not in _rate_limit_store:
         _rate_limit_store[client_ip] = {"count": 0, "window_start": 0}
-    
+
     import time
     now = time.time()
     window = 60
-    
+
     if now - _rate_limit_store[client_ip]["window_start"] > window:
         _rate_limit_store[client_ip] = {"count": 1, "window_start": now}
     else:
@@ -63,6 +66,19 @@ async def rate_limit(request: Request):
                 status_code=429,
                 detail="Rate limit exceeded"
             )
+
+
+def register_services():
+    """
+    注册所有服务到 IOC 容器
+    """
+    logger.info("Registering services to container...")
+
+    container.register(WorkflowRepository)
+    container.register(ChatService)
+    container.register(ApprovalService)
+
+    logger.info("Services registered successfully")
 
 
 @asynccontextmanager
@@ -76,6 +92,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"调试模式: {settings.DEBUG}")
     logger.info(f"API Key 认证: {'启用' if settings.API_KEY else '未启用'}")
     logger.info("=" * 50)
+
+    register_services()
 
     yield
 
@@ -93,34 +111,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    @app.middleware("http")
-    async def request_id_middleware(request: Request, call_next):
-        """
-        请求 ID 中间件
-        """
-        request_id = str(uuid.uuid4())
-        request.state.request_id = request_id
-        
-        with logger.contextualize(request_id=request_id):
-            response = await call_next(request)
-        
-        return response
-
-    @app.middleware("http")
-    async def error_handler_middleware(request: Request, call_next):
-        """
-        全局错误处理中间件
-        """
-        try:
-            return await call_next(request)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"未处理的异常: {e}")
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Internal Server Error"}
-            )
+    setup_middleware(app)
 
     app.add_middleware(
         CORSMiddleware,
@@ -130,77 +121,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(
-        chat.router,
-        dependencies=[Depends(verify_api_key), Depends(rate_limit)]
-    )
-    app.include_router(
-        approval.router,
-        dependencies=[Depends(verify_api_key), Depends(rate_limit)]
-    )
-
-    @app.get("/", response_model=HealthResponse)
-    async def root() -> HealthResponse:
-        """根路径 - 健康检查"""
-        return HealthResponse()
-
-    @app.get("/health", response_model=HealthResponse)
-    async def health() -> HealthResponse:
-        """健康检查接口"""
-        return HealthResponse()
-
-    @app.get("/health/live")
-    async def health_live() -> dict:
-        """Liveness 健康检查"""
-        return {"status": "ok", "service": "x-langgraph-api"}
-
-    @app.get("/health/ready")
-    async def health_ready() -> dict:
-        """Readiness 健康检查"""
-        checks = []
-        
-        try:
-            from core.checkpointer import get_mysql_connection_string
-            from sqlalchemy.ext.asyncio import create_async_engine
-            from sqlalchemy import text
-            
-            connection_string = get_mysql_connection_string()
-            engine = create_async_engine(connection_string)
-            async with engine.begin() as conn:
-                await conn.execute(text("SELECT 1"))
-            checks.append({"name": "mysql", "status": "ok"})
-        except Exception as e:
-            checks.append({"name": "mysql", "status": "failed", "error": str(e)})
-        
-        try:
-            from llm.providers import get_llm_provider
-            
-            provider = get_llm_provider(settings.get_available_provider())
-            checks.append({"name": "llm_provider", "status": "ok", "provider": provider.name})
-        except Exception as e:
-            checks.append({"name": "llm_provider", "status": "failed", "error": str(e)})
-        
-        all_ok = all(check["status"] == "ok" for check in checks)
-        
-        return {
-            "status": "ok" if all_ok else "degraded",
-            "checks": checks,
-            "service": "x-langgraph-api"
-        }
-
-    @app.get("/metrics")
-    async def metrics() -> str:
-        """Prometheus 指标端点"""
-        lines = []
-        lines.append("# HELP x_langgraph_requests_total Total requests")
-        lines.append(f"# TYPE x_langgraph_requests_total counter")
-        lines.append(f"x_langgraph_requests_total {sum(data['count'] for data in _rate_limit_store.values())}")
-        
-        lines.append("# HELP x_langgraph_active_clients Active clients")
-        lines.append("# TYPE x_langgraph_active_clients gauge")
-        lines.append(f"x_langgraph_active_clients {len(_rate_limit_store)}")
-        
-        return "\n".join(lines)
+    app.include_router(api_router)
 
     return app
 

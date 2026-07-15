@@ -12,13 +12,12 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from constants.schemas import ChatRequest, ChatResponse, StreamEvent
+from schemas.chat import ChatRequest, ChatResponse, StreamEvent
 from core.logger import logger
+from core.container import container
 from services.chat_service import ChatService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-chat_service = ChatService()
 
 
 @router.post("", response_model=ChatResponse)
@@ -32,11 +31,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
     Returns:
         聊天响应
     """
+    chat_service = container.resolve(ChatService)
     logger.info(f"收到聊天请求: session_id={request.session_id}, workflow={request.workflow}")
 
     try:
         result = await chat_service.create(request.model_dump())
-        
+
         return ChatResponse(
             response=result.get("response", ""),
             session_id=result.get("session_id", request.session_id),
@@ -59,6 +59,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     Returns:
         SSE 流式响应
     """
+    chat_service = container.resolve(ChatService)
     logger.info(f"收到流式聊天请求: session_id={request.session_id}")
 
     async def generate() -> AsyncGenerator[str, None]:

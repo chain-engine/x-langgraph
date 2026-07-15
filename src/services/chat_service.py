@@ -7,7 +7,8 @@
 
 from typing import Any, Optional, AsyncGenerator
 
-from models.base import Service
+from common.base import Service
+from repositories.workflow_repository import WorkflowRepository
 from core.logger import logger
 from core.config import settings
 
@@ -15,8 +16,13 @@ from core.config import settings
 class ChatService(Service):
     """聊天服务"""
 
-    def __init__(self):
-        """初始化聊天服务"""
+    def __init__(self, repository: Optional[WorkflowRepository] = None):
+        """初始化聊天服务
+
+        Args:
+            repository: 工作流仓库实例
+        """
+        self._repository = repository or WorkflowRepository()
         logger.info("Chat service initialized")
 
     async def get_by_id(self, entity_id: str) -> Optional[Any]:
@@ -29,7 +35,7 @@ class ChatService(Service):
             Optional[Any]: 聊天记录或None
         """
         logger.info(f"Get chat by id: {entity_id}")
-        return None
+        return await self._repository.get_state(entity_id)
 
     async def create(self, data: dict[str, Any]) -> Any:
         """创建聊天
@@ -47,7 +53,7 @@ class ChatService(Service):
         logger.info(f"Create chat: message={message[:50]}, session_id={session_id}, workflow={workflow_type}")
 
         result = await self._execute_workflow(workflow_type, message, session_id)
-        
+
         return {
             "response": result.get("response", ""),
             "session_id": session_id,
@@ -77,6 +83,7 @@ class ChatService(Service):
             bool: 是否删除成功
         """
         logger.info(f"Delete chat: {entity_id}")
+        await self._repository.delete_state(entity_id)
         return True
 
     async def list_all(
@@ -85,7 +92,7 @@ class ChatService(Service):
         page_size: int = 20,
         filters: Optional[dict[str, Any]] = None,
         sort_by: Optional[str] = None,
-        sort_order: Optional[str] = None
+        sort_order: Optional[str] = None,
     ) -> dict[str, Any]:
         """查询所有聊天
 
@@ -99,7 +106,9 @@ class ChatService(Service):
         Returns:
             dict[str, Any]: 分页数据
         """
-        return {"data": [], "total": 0, "page": page, "page_size": page_size}
+        offset = (page - 1) * page_size
+        data = await self._repository.list_states(limit=page_size, offset=offset)
+        return {"data": data, "total": len(data), "page": page, "page_size": page_size}
 
     async def _execute_workflow(self, workflow_type: str, message: str, session_id: str) -> dict[str, Any]:
         """

@@ -2,137 +2,234 @@
 """
 工作流数据访问层
 
-管理工作流状态的持久化和查询
+封装工作流状态的 CRUD 操作、多表联查、分页、条件查询。
 """
 
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
-from models.base import Repository
+from sqlalchemy import select, update
+
+from models.workflow import WorkflowInstance, WorkflowNode, WorkflowExecution
+from infra.mysql import session_factory
 from core.logger import logger
-from core.checkpointer import create_checkpointer
+from core.exceptions import DatabaseError, NotFoundError
 
 
-class WorkflowRepository(Repository):
-    """工作流仓库
+class WorkflowRepository:
+    """
+    工作流状态数据访问层
 
-    实现工作流状态的数据访问操作
+    封装基于 LangGraph Checkpointer 的工作流状态 CRUD 操作。
     """
 
-    def __init__(self):
-        """初始化工作流仓库"""
-        self._checkpointer = None
-        logger.info("Workflow repository initialized")
+    def __init__(self, checkpointer: Any = None):
+        """
+        初始化工作流仓库
 
-    async def initialize(self):
-        """初始化 Checkpointer"""
+        Args:
+            checkpointer: LangGraph Checkpointer 实例
+        """
+        self._checkpointer = checkpointer
+
+    async def get_checkpointer(self) -> Any:
+        """
+        获取 Checkpointer 实例
+
+        Returns:
+            Any: Checkpointer 实例
+        """
         if self._checkpointer is None:
+            from core.checkpointer import create_checkpointer
             self._checkpointer = await create_checkpointer()
-            logger.info("Workflow repository checkpointer initialized")
-
-    @property
-    def checkpointer(self):
-        """获取 Checkpointer"""
         return self._checkpointer
 
-    async def get_by_id(self, entity_id: str) -> Optional[Any]:
-        """根据ID获取工作流状态
+    async def get_state(self, thread_id: str) -> Optional[Dict[str, Any]]:
+        """
+        获取工作流状态
 
         Args:
-            entity_id: 会话ID
+            thread_id: 会话 ID
 
         Returns:
-            Optional[Any]: 工作流状态或None
+            Optional[Dict[str, Any]]: 工作流状态数据
         """
-        if self._checkpointer is None:
-            await self.initialize()
-
         try:
-            from langgraph.graph import StateGraph
-            graph = StateGraph(dict)
-            graph.add_node("start", lambda x: x)
-            graph.set_entry_point("start")
-            graph.set_finish_point("start")
-            compiled = graph.compile(checkpointer=self._checkpointer)
-            
-            config = {"configurable": {"thread_id": entity_id}}
-            state = await compiled.aget_state(config)
-            
-            if state.values:
-                return state.values
-            return None
-        except Exception as e:
-            logger.error(f"Failed to get workflow state: {e}")
-            return None
-
-    async def create(self, entity: Any) -> Any:
-        """创建工作流状态
-
-        Args:
-            entity: 工作流状态数据
-
-        Returns:
-            Any: 创建的工作流状态
-        """
-        if self._checkpointer is None:
-            await self.initialize()
-
-        try:
-            thread_id = entity.get("thread_id", entity.get("session_id", "default"))
-            
-            from langgraph.graph import StateGraph
-            graph = StateGraph(dict)
-            graph.add_node("start", lambda x: x)
-            graph.set_entry_point("start")
-            graph.set_finish_point("start")
-            compiled = graph.compile(checkpointer=self._checkpointer)
+            checkpointer = await self.get_checkpointer()
             
             config = {"configurable": {"thread_id": thread_id}}
-            await compiled.ainvoke(entity, config=config)
+            checkpoint = await checkpointer.get(config)
             
-            logger.info(f"Workflow state created: {thread_id}")
-            return entity
+            if checkpoint is None:
+                return None
+            
+            return {
+                "thread_id": thread_id,
+                "status": "running",
+                "checkpoint": checkpoint,
+            }
         except Exception as e:
-            logger.error(f"Failed to create workflow state: {e}")
+            logger.error(f"Failed to get workflow state: {e}", exc_info=True)
+            raise DatabaseError(message=str(e))
+
+    async def save_state(self, thread_id: str, state: Dict[str, Any]) -> None:
+        """
+        保存工作流状态
+
+        Args:
+            thread_id: 会话 ID
+            state: 工作流状态数据
+        """
+        try:
+            checkpointer = await self.get_checkpointer()
+            
+            config = {"configurable": {"thread_id": thread_id}}
+            await checkpointer.put(config, state)
+            
+            logger.debug(f"Workflow state saved: {thread_id}")
+        except Exception as e:
+            logger.error(f"Failed to save workflow state: {e}", exc_info=True)
+            raise DatabaseError(message=str(e))
+
+    async def delete_state(self, thread_id: str) -> None:
+        """
+        删除工作流状态
+
+        Args:
+            thread_id: 会话 ID
+        """
+        try:
+            checkpointer = await self.get_checkpointer()
+            
+            config = {"configurable": {"thread_id": thread_id}}
+            await checkpointer.delete(config)
+            
+            logger.debug(f"Workflow state deleted: {thread_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete workflow state: {e}", exc_info=True)
+            raise DatabaseError(message=str(e))
+
+    async def list_states(self, limit: int = 10, offset: int = 0) -> list[Dict[str, Any]]:
+        """
+        列出工作流状态列表
+
+        Args:
+            limit: 每页数量
+            offset: 偏移量
+
+        Returns:
+            list[Dict[str, Any]]: 工作流状态列表
+        """
+        try:
+            return session_factory.execute(
+                lambda session: session.query(WorkflowInstance)
+                .order_by(WorkflowInstance.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+                .all()
+            )
+        except Exception as e:
+            logger.error(f"Failed to list workflow states: {e}", exc_info=True)
+            raise DatabaseError(message=str(e))
+
+    async def get_instance(self, thread_id: str) -> Optional[WorkflowInstance]:
+        """
+        获取工作流实例
+
+        Args:
+            thread_id: 会话 ID
+
+        Returns:
+            Optional[WorkflowInstance]: 工作流实例
+        """
+        try:
+            result = session_factory.execute(
+                lambda session: session.query(WorkflowInstance)
+                .filter(WorkflowInstance.thread_id == thread_id)
+                .first()
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Failed to get workflow instance: {e}", exc_info=True)
+            raise DatabaseError(message=str(e))
+
+    async def create_instance(self, workflow_name: str, thread_id: str) -> WorkflowInstance:
+        """
+        创建工作流实例
+
+        Args:
+            workflow_name: 工作流名称
+            thread_id: 会话 ID
+
+        Returns:
+            WorkflowInstance: 创建的工作流实例
+        """
+        try:
+            instance = WorkflowInstance(
+                workflow_name=workflow_name,
+                thread_id=thread_id,
+                status="running",
+            )
+            
+            result = session_factory.transaction(
+                lambda session: session.add(instance) or instance
+            )
+            
+            logger.info(f"Workflow instance created: {thread_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to create workflow instance: {e}", exc_info=True)
+            raise DatabaseError(message=str(e))
+
+    async def update_instance(self, thread_id: str, **kwargs) -> WorkflowInstance:
+        """
+        更新工作流实例
+
+        Args:
+            thread_id: 会话 ID
+            **kwargs: 更新字段
+
+        Returns:
+            WorkflowInstance: 更新后的工作流实例
+        """
+        try:
+            instance = await self.get_instance(thread_id)
+            if not instance:
+                raise NotFoundError(message=f"Workflow instance not found: {thread_id}")
+            
+            for key, value in kwargs.items():
+                setattr(instance, key, value)
+            
+            result = session_factory.transaction(
+                lambda session: session.merge(instance)
+            )
+            
+            logger.debug(f"Workflow instance updated: {thread_id}")
+            return result
+        except NotFoundError:
             raise
+        except Exception as e:
+            logger.error(f"Failed to update workflow instance: {e}", exc_info=True)
+            raise DatabaseError(message=str(e))
 
-    async def update(self, entity: Any) -> Any:
-        """更新工作流状态
+    async def delete_instance(self, thread_id: str) -> None:
+        """
+        删除工作流实例
 
         Args:
-            entity: 工作流状态数据
-
-        Returns:
-            Any: 更新后的工作流状态
+            thread_id: 会话 ID
         """
-        return await self.create(entity)
-
-    async def delete(self, entity_id: str) -> bool:
-        """删除工作流状态
-
-        Args:
-            entity_id: 会话ID
-
-        Returns:
-            bool: 是否删除成功
-        """
-        logger.warning("Workflow state deletion not implemented for LangGraph checkpointer")
-        return False
-
-    async def list_all(
-        self,
-        skip: int = 0,
-        limit: int = 100,
-        filters: Optional[dict[str, Any]] = None
-    ) -> tuple[list[Any], int]:
-        """查询所有工作流状态
-
-        Args:
-            skip: 跳过记录数
-            limit: 限制记录数
-            filters: 过滤条件
-
-        Returns:
-            tuple[list[Any], int]: 工作流状态列表和总数
-        """
-        logger.warning("Listing workflow states not implemented for LangGraph checkpointer")
-        return [], 0
+        try:
+            instance = await self.get_instance(thread_id)
+            if not instance:
+                raise NotFoundError(message=f"Workflow instance not found: {thread_id}")
+            
+            session_factory.transaction(
+                lambda session: session.delete(instance)
+            )
+            
+            logger.info(f"Workflow instance deleted: {thread_id}")
+        except NotFoundError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete workflow instance: {e}", exc_info=True)
+            raise DatabaseError(message=str(e))

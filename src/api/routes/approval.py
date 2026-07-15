@@ -8,13 +8,12 @@ API层只做接口注册和转发，具体业务逻辑由Service层处理
 
 from fastapi import APIRouter, HTTPException
 
-from constants.schemas import ApprovalRequest, ApprovalResponse
+from schemas.approval import ApprovalRequest, ApprovalResponse
 from core.logger import logger
+from core.container import container
 from services.approval_service import ApprovalService
 
 router = APIRouter(prefix="/approval", tags=["approval"])
-
-approval_service = ApprovalService()
 
 
 @router.post("/resume", response_model=ApprovalResponse)
@@ -30,6 +29,7 @@ async def resume_workflow(request: ApprovalRequest) -> ApprovalResponse:
     Returns:
         审批响应
     """
+    approval_service = container.resolve(ApprovalService)
     logger.info(f"收到审批请求: session_id={request.session_id}, approved={request.approved}")
 
     try:
@@ -60,6 +60,7 @@ async def get_approval_status(session_id: str) -> dict:
     Returns:
         审批状态
     """
+    approval_service = container.resolve(ApprovalService)
     try:
         result = await approval_service.get_approval_status(session_id)
         return result

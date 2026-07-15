@@ -3,36 +3,41 @@
 日志模块
 
 提供统一的日志配置和记录功能，便于项目的监控和调试。
+日志按小时自动切割，输出到 logs/ 目录。
 """
 
 import os
 from typing import Callable, Final
+
 from loguru import logger
 
-# 确保日志目录存在
-log_dir: Final[str] = 'logs'
-os.makedirs(log_dir, exist_ok=True)
+from core.config import settings
 
-# 移除默认的控制台处理器，避免重复输出
+PROJECT_NAME: Final[str] = "x-langgraph"
+
+LOG_DIR: Final[str] = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
 logger.remove()
 
-# 配置日志输出到文件
+log_file_path: str = os.path.join(LOG_DIR, f"{PROJECT_NAME}{{time:YYYYMMDDhh}}.log")
+
 logger.add(
-    os.path.join(log_dir, 'x-langchain_{time}.log'),
-    rotation='1 day',
-    retention='7 days',
-    compression='zip',
-    level='INFO',
-    enqueue=True
+    log_file_path,
+    rotation="1 hour",
+    retention="7 days",
+    compression="zip",
+    level=settings.DEBUG and "DEBUG" or "INFO",
+    enqueue=True,
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
 )
 
-# 配置日志输出到控制台
 console_sink: Callable[[str], None] = lambda msg: print(msg, end="")
 logger.add(
     sink=console_sink,
-    level='DEBUG',
-    enqueue=True
+    level=settings.DEBUG and "DEBUG" or "INFO",
+    enqueue=True,
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
 )
 
-# 导出logger实例
-__all__: Final[list[str]] = ['logger']
+__all__: Final[list[str]] = ["logger"]
