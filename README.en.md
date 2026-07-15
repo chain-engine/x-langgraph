@@ -136,7 +136,7 @@ x-langgraph/
 │   │   ├── base.py                   # SQLAlchemy Base
 │   │   └── workflow.py               # Workflow entity model
 │   │
-│   ├── infra/                        # Infrastructure Layer
+│   ├── infras/                       # Infrastructure Layer
 │   │   ├── __init__.py
 │   │   ├── mysql.py                  # MySQL session factory
 │   │   ├── redis.py                  # Redis client wrapper
@@ -249,12 +249,12 @@ x-langgraph/
 ```
 api → service → repository
                 repository → models
-                repository → infra
+                repository → infras
 ```
 
 - **API Layer**: Only responsible for parameter receiving, authentication, forwarding calls, standardized returns. No business logic, no data operations.
 - **Service Layer**: Handles business rules, transaction orchestration, multi-repository coordination, complex business calculations.
-- **Repository Layer**: Encapsulates business CRUD, multi-table queries, pagination, conditional queries. Depends on infra for database sessions.
+- **Repository Layer**: Encapsulates business CRUD, multi-table queries, pagination, conditional queries. Depends on infras for database sessions.
 - **Models Layer**: Pure data table mapping models. Only defines fields and table relationships. No queries or business logic.
 - **Infra Layer**: Encapsulates third-party middleware, clients, connection lifecycle, underlying resource management. **Never depends on repository/service/api**.
 

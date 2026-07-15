@@ -29,7 +29,7 @@ async def resume_workflow(request: ApprovalRequest) -> ApprovalResponse:
     Returns:
         审批响应
     """
-    approval_service = container.resolve(ApprovalService)
+    approval_service: ApprovalService = container.resolve(ApprovalService)
     logger.info(f"收到审批请求: session_id={request.session_id}, approved={request.approved}")
 
     try:
@@ -60,7 +60,7 @@ async def get_approval_status(session_id: str) -> ApprovalStatusResponse:
     Returns:
         审批状态
     """
-    approval_service = container.resolve(ApprovalService)
+    approval_service: ApprovalService = container.resolve(ApprovalService)
     try:
         result = await approval_service.get_approval_status(session_id)
         return ApprovalStatusResponse(**result)

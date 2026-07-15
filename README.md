@@ -137,7 +137,7 @@ x-langgraph/
 │   │   ├── base.py                   # SQLAlchemy Base
 │   │   └── workflow.py               # 工作流实体模型
 │   │
-│   ├── infra/                        # 基础设施层
+│   ├── infras/                       # 基础设施层
 │   │   ├── __init__.py
 │   │   ├── mysql.py                  # MySQL 会话工厂
 │   │   ├── redis.py                  # Redis 客户端封装
@@ -234,7 +234,7 @@ flowchart TD
         workflow_model["Workflow Model"]
     end
 
-    subgraph infra_layer["基础设施层 (infra)"]
+    subgraph infra_layer["基础设施层 (infras)"]
         mysql["MySQL Session"]
         redis["Redis Client"]
         http["HTTP Client"]
@@ -260,12 +260,12 @@ flowchart TD
 ```
 api → service → repository
                 repository → models
-                repository → infra
+                repository → infras
 ```
 
 - **API 层**：仅负责参数接收、鉴权、转发调用、标准化返回，无业务逻辑、无数据操作
 - **Service 层**：处理业务规则、事务编排、多仓储联动、复杂业务计算
-- **Repository 层**：封装业务 CRUD、多表联查、分页、条件查询；依赖 infra 获取数据库会话
+- **Repository 层**：封装业务 CRUD、多表联查、分页、条件查询；依赖 infras 获取数据库会话
 - **Models 层**：纯数据表映射模型，仅定义字段、表关联关系，无任何查询、业务逻辑
 - **Infra 层**：封装第三方中间件、客户端、连接生命周期、底层资源管理，**永不反向依赖 repository/service/api**
 

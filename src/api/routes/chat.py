@@ -31,7 +31,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     Returns:
         聊天响应
     """
-    chat_service = container.resolve(ChatService)
+    chat_service: ChatService = container.resolve(ChatService)
     logger.info(f"收到聊天请求: session_id={request.session_id}, workflow={request.workflow}")
 
     try:
@@ -59,7 +59,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     Returns:
         SSE 流式响应
     """
-    chat_service = container.resolve(ChatService)
+    chat_service: ChatService = container.resolve(ChatService)
     logger.info(f"收到流式聊天请求: session_id={request.session_id}")
 
     async def generate() -> AsyncGenerator[str, None]:

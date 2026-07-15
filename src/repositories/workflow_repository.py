@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import select, update
 
 from models.workflow import WorkflowInstance, WorkflowNode, WorkflowExecution
-from infra.mysql import session_factory
+from infras.mysql import session_factory
 from core.logger import logger
 from core.exceptions import DatabaseError, NotFoundError
 
