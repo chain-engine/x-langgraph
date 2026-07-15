@@ -10,7 +10,6 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 from core.logger import logger
-from core.response import error_response
 from core.exceptions import (
     BaseException as CoreBaseException,
     ValidationError,
@@ -51,12 +50,13 @@ async def error_handler_middleware(request: Request, call_next: Callable) -> Res
         
         return JSONResponse(
             status_code=e.code,
-            content=error_response(
-                message=e.message,
-                code=e.code,
-                errors=e.detail,
-                request_id=request_id,
-            ),
+            content={
+                "success": False,
+                "message": e.message,
+                "code": e.code,
+                "errors": e.detail,
+                "request_id": request_id,
+            },
         )
     except Exception as e:
         request_id = getattr(request.state, "request_id", None)
@@ -64,12 +64,13 @@ async def error_handler_middleware(request: Request, call_next: Callable) -> Res
         
         return JSONResponse(
             status_code=500,
-            content=error_response(
-                message="Internal server error",
-                code=500,
-                errors={"detail": str(e)},
-                request_id=request_id,
-            ),
+            content={
+                "success": False,
+                "message": "Internal server error",
+                "code": 500,
+                "errors": {"detail": str(e)},
+                "request_id": request_id,
+            },
         )
 
 

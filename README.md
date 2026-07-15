@@ -34,7 +34,7 @@
 | **Node** | 节点，执行具体任务的函数 | `def my_node(state): return {...}` |
 | **Edge** | 边，定义节点间的流转 | `graph.add_edge("a", "b")` |
 | **Conditional Edge** | 条件边，根据状态动态路由 | `graph.add_conditional_edges(...)` |
-| **Checkpointer** | 状态持久化器 | `MemorySaver()` / `MySQLSaver` |
+| **Checkpointer** | 状态持久化器 | `MemorySaver()` / `AsyncMySQLSaver` |
 | **interrupt** | 中断执行，等待外部输入 | `interrupt({"type": "approval"})` |
 | **Command** | 恢复执行的命令 | `Command(resume={...})` |
 
@@ -85,131 +85,188 @@ def router_node(state):
 ## 核心特征
 
 - **多工作流支持**：内置 5 种典型工作流（简单路由、智能客服、RAG问答、多智能体协作、自动化审批）
-- **状态持久化**：基于 MySQL 的 Checkpointer 实现，支持工作流中断与恢复
+- **状态持久化**：基于 MySQL 的 Checkpointer 实现，支持工作流中断与恢复，MySQL不可用时自动降级到 MemorySaver
 - **Human-in-the-Loop**：支持人工审批、中断恢复等交互式场景
 - **多 LLM 提供者**：支持 DeepSeek、豆包、阿里云等主流大模型
 - **Provider 模式**：工具与数据源解耦，支持 Mock 测试和真实 API 切换
 - **流式输出**：支持 SSE 流式响应，提升用户体验
 - **统一基类**：所有工作流继承 `BaseWorkflow`，接口一致
+- **分层架构**：标准五层业务架构（API → Service → Repository → Models → Infra）
+- **IOC 容器**：依赖注入容器，便于单元测试和模块解耦
+- **API 安全**：API Key 认证 + 速率限制（60 请求/分钟/IP）
+- **可观测性**：请求 ID 中间件、结构化日志、健康检查、Prometheus 指标
 - **Docker 部署**：提供完整的容器化部署方案
 
 ## 项目结构
 
 ```
 x-langgraph/
-├── src/                          # 业务代码（源码目录）
-│   ├── api/                      # API 服务层
-│   │   ├── main.py               # FastAPI 应用入口
-│   │   ├── schemas.py            # 数据模型定义
-│   │   └── routes/               # 路由模块
-│   │       ├── chat.py           # 聊天接口
-│   │       └── approval.py       # 审批接口
+├── src/                              # 业务代码（源码目录）
+│   ├── api/                          # API 接口层
+│   │   ├── routes/                   # 路由模块
+│   │   │   ├── __init__.py
+│   │   │   ├── chat.py               # 聊天接口（/chat）
+│   │   │   ├── approval.py           # 审批接口（/approval）
+│   │   │   ├── health.py             # 健康检查接口
+│   │   │   └── metrics.py            # Prometheus 指标接口
+│   │   ├── __init__.py
+│   │   └── router.py                 # 路由注册管理
 │   │
-│   ├── config/                   # 配置管理
-│   │   └── settings.py           # 环境变量配置
+│   ├── core/                         # 核心支撑层
+│   │   ├── __init__.py
+│   │   ├── config.py                 # 全局配置中心（支持 YAML + 环境变量）
+│   │   ├── logger.py                 # 日志配置（loguru）
+│   │   ├── exceptions.py             # 全局异常定义
+│   │   ├── middleware.py             # 中间件（请求ID、错误处理、CORS）
+│   │   └── container.py              # IOC 依赖注入容器
 │   │
-│   ├── constants/                # 常量定义
-│   │   ├── develop.py            # 开发相关常量
-│   │   └── streaming_modes.py    # 流式模式常量
+│   ├── services/                     # 业务逻辑层
+│   │   ├── __init__.py
+│   │   ├── base.py                   # Service 基类
+│   │   ├── chat_service.py           # 聊天业务逻辑
+│   │   └── approval_service.py       # 审批业务逻辑
 │   │
-│   ├── core/                     # 核心功能
-│   │   ├── logger.py             # 日志模块（loguru）
-│   │   └── checkpointer.py       # MySQL 状态持久化
+│   ├── repositories/                 # 数据访问层
+│   │   ├── __init__.py
+│   │   ├── base.py                   # Repository 基类
+│   │   └── workflow_repository.py    # 工作流状态访问
 │   │
-│   ├── llm/                      # LLM 提供者模块
-│   │   ├── providers.py          # LLM 提供者（DeepSeek/豆包/阿里云）
-│   │   └── prompts.py            # 提示模板管理
+│   ├── models/                       # ORM 实体层
+│   │   ├── __init__.py
+│   │   ├── base.py                   # SQLAlchemy Base
+│   │   └── workflow.py               # 工作流实体模型
 │   │
-│   ├── tools/                    # 工具模块
-│   │   ├── base.py               # 工具基类
-│   │   ├── search_tools.py       # 搜索工具
-│   │   ├── calculation_tools.py  # 计算工具
-│   │   ├── weather_tools.py      # 天气工具
-│   │   ├── data_tools.py         # 数据处理工具
-│   │   └── database_tools.py     # 数据库工具（Text2SQL）
+│   ├── infra/                        # 基础设施层
+│   │   ├── __init__.py
+│   │   ├── mysql.py                  # MySQL 会话工厂
+│   │   ├── redis.py                  # Redis 客户端封装
+│   │   └── http_client.py            # 通用 HTTP 客户端
 │   │
-│   └── workflows/                # 工作流模块
-│       ├── base.py               # 工作流基类（BaseWorkflow）
-│       ├── simple_router/        # 简单路由工作流
-│       ├── customer_service/     # 智能客服工作流
-│       ├── rag_qa/               # RAG 文档问答工作流
-│       ├── multi_agent/          # 多智能体协作工作流
-│       └── approval/             # 自动化审批工作流
+│   ├── schemas/                      # 数据模型层
+│   │   ├── __init__.py
+│   │   ├── chat.py                   # 聊天接口 Schema
+│   │   ├── approval.py               # 审批接口 Schema
+│   │   └── health.py                 # 健康检查 Schema
+│   │
+│   ├── constants/                    # 全局常量
+│   │   ├── __init__.py
+│   │   ├── develop.py                # 开发相关常量
+│   │   ├── streaming_modes.py        # 流式模式常量
+│   │   └── enums.py                  # 枚举定义（Environment 等）
+│   │
+│   ├── utils/                        # 工具函数
+│   │   └── __init__.py
+│   │
+│   ├── llm/                          # LLM 提供者模块
+│   │   ├── __init__.py
+│   │   ├── providers.py              # LLM 提供者（DeepSeek/豆包/阿里云）
+│   │   └── prompts.py                # 提示模板管理
+│   │
+│   ├── tools/                        # 工具模块
+│   │   ├── weather/                  # 天气工具（多 Provider）
+│   │   ├── __init__.py
+│   │   ├── base.py                   # 工具基类
+│   │   ├── search_tools.py           # 搜索工具
+│   │   ├── calculation_tools.py      # 计算工具
+│   │   ├── weather_tools.py          # 天气工具
+│   │   ├── data_tools.py             # 数据处理工具
+│   │   └── database_tools.py         # 数据库工具（Text2SQL）
+│   │
+│   ├── workflows/                    # 工作流模块
+│   │   ├── base.py                   # 工作流基类（BaseWorkflow）
+│   │   ├── checkpointer.py           # LangGraph Checkpointer（状态持久化）
+│   │   ├── simple_router/            # 简单路由工作流
+│   │   ├── customer_service/         # 智能客服工作流
+│   │   ├── rag_qa/                   # RAG 文档问答工作流
+│   │   ├── multi_agent/              # 多智能体协作工作流
+│   │   └── approval/                 # 自动化审批工作流
+│   │
+│   ├── __init__.py
+│   └── main.py                       # FastAPI 应用入口
 │
-├── docker/                       # Docker 配置
+├── docker/                           # Docker 配置
 │   └── mysql/
-│       └── init.sql              # MySQL 初始化脚本
+│       └── init.sql                  # MySQL 初始化脚本
 │
-├── examples/                     # 示例代码
-│   ├── hello_world.py            # 基础示例
-│   ├── agent_workflow.py         # 基础工作流示例
-│   ├── demo_workflows.py         # 高级工作流示例
-│   └── langgraph_platform.py     # LangGraph Platform 部署示例
+├── examples/                         # 示例代码
+│   ├── hello_world.py                # 基础示例
+│   ├── agent_workflow.py             # 基础工作流示例
+│   ├── demo_workflows.py             # 高级工作流示例
+│   └── langgraph_platform.py         # LangGraph Platform 部署示例
 │
-├── tests/                        # 测试代码
-├── .env                          # 环境变量配置
-├── .env.example                  # 环境变量模板
-├── Dockerfile                    # Docker 镜像配置
-├── docker-compose.yml            # Docker 编排配置
-├── langgraph.json                # LangGraph Platform 配置
-└── pyproject.toml                # 项目配置
+├── tests/                            # 测试代码
+├── scripts/                          # 运维脚本
+├── logs/                             # 运行时日志
+├── .env                              # 环境变量配置（私有，不提交）
+├── .env.example                      # 环境变量模板（公开，可提交）
+├── config.yaml                       # YAML 配置文件（可选）
+├── Dockerfile                        # Docker 镜像配置
+├── docker-compose.yml                # Docker 编排配置
+├── langgraph.json                    # LangGraph Platform 配置
+├── pyproject.toml                    # 项目配置
+└── README.md / README.en.md          # 项目文档
 ```
 
 ## 系统架构
 
-### 系统分层架构图
+### 标准五层业务架构
 
 ```mermaid
 flowchart TD
-    subgraph client_layer["客户端层 (Client Layer)"]
-        web["Web / Mobile / Desktop Apps"]
+    subgraph api_layer["API 接口层 (api)"]
+        chat["chat.py"]
+        approval["approval.py"]
+        health["health.py"]
+        metrics["metrics.py"]
     end
 
-    subgraph api_layer["API 层 (API Layer) — FastAPI Application"]
-        chat["POST /chat"]
-        stream["POST /chat/stream"]
-        approval["approval/resume\napproval/status/:id"]
+    subgraph service_layer["业务逻辑层 (services)"]
+        chat_service["ChatService"]
+        approval_service["ApprovalService"]
     end
 
-    subgraph workflow_layer["工作流层 (Workflow Layer) — src/workflows/"]
-        router["Simple Router"]
-        customer["Customer Svc"]
-        rag["RAG QA"]
-        agent["MultiAgent"]
-        approval_wf["Approval"]
-        base["BaseWorkflow (抽象基类)"]
+    subgraph repo_layer["数据访问层 (repositories)"]
+        workflow_repo["WorkflowRepository"]
     end
 
-    subgraph tools_layer["工具层 (Tools)"]
-        tools["search / calc / weather\ndata / database"]
+    subgraph model_layer["ORM 实体层 (models)"]
+        workflow_model["Workflow Model"]
     end
 
-    subgraph llm_layer["LLM 提供者层"]
-        llm["DeepSeek / Doubao\nAliyun Qwen"]
+    subgraph infra_layer["基础设施层 (infra)"]
+        mysql["MySQL Session"]
+        redis["Redis Client"]
+        http["HTTP Client"]
     end
 
-    subgraph core_layer["持久化层 (Core)"]
-        checkpointer["checkpointer (MySQL)"]
-        logger["logger"]
+    subgraph core_layer["核心支撑层 (core)"]
+        config["config.py"]
+        logger["logger.py"]
+        middleware["middleware.py"]
+        container["container.py"]
     end
 
-    subgraph infra_layer["基础设施层 (Infrastructure)"]
-        ext["External API (高德/搜索)"]
-        mysql["MySQL (Checkpoint)"]
-        config["Config / Logger"]
-    end
-
-    client_layer -->|"HTTP / SSE"| api_layer
-    api_layer --> workflow_layer
-    workflow_layer --> tools_layer
-    workflow_layer --> llm_layer
-    workflow_layer --> core_layer
-    tools_layer --> ext
-    tools_layer --> mysql
-    llm_layer --> ext
-    core_layer --> mysql
-    core_layer --> config
+    api_layer --> service_layer
+    service_layer --> repo_layer
+    repo_layer --> model_layer
+    repo_layer --> infra_layer
+    service_layer -.-> core_layer
+    api_layer -.-> core_layer
 ```
+
+### 层间单向依赖规则
+
+```
+api → service → repository
+                repository → models
+                repository → infra
+```
+
+- **API 层**：仅负责参数接收、鉴权、转发调用、标准化返回，无业务逻辑、无数据操作
+- **Service 层**：处理业务规则、事务编排、多仓储联动、复杂业务计算
+- **Repository 层**：封装业务 CRUD、多表联查、分页、条件查询；依赖 infra 获取数据库会话
+- **Models 层**：纯数据表映射模型，仅定义字段、表关联关系，无任何查询、业务逻辑
+- **Infra 层**：封装第三方中间件、客户端、连接生命周期、底层资源管理，**永不反向依赖 repository/service/api**
 
 ### 核心功能业务流程图
 
@@ -280,30 +337,6 @@ flowchart TD
 
 **核心特性**: 自动评估、风险评估、Human-in-the-Loop、通知发送
 
-### 模块依赖关系图
-
-```mermaid
-flowchart TD
-    api["API Layer\nroutes/chat.py, routes/approval.py"]
-
-    subgraph wf_layer["Workflow Layer"]
-        wf["simple_router / customer_service / rag_qa\n/multi_agent / etc."]
-        base["extends BaseWorkflow (base.py)"]
-    end
-
-    tools["Tools Layer\nsearch / calc / weather\ndata / database"]
-    llm["LLM Layer\nproviders.py (DeepSeek/etc.)\nprompts.py"]
-    core["Core Layer\ncheckpointer.py (MySQL)\nlogger.py (loguru)"]
-    cfg["Config Layer\nsettings.py (Pydantic Settings)"]
-
-    api --> wf
-    wf --> tools
-    wf --> llm
-    tools --> core
-    llm --> core
-    core --> cfg
-```
-
 ## 快速开始
 
 ### 环境要求
@@ -373,28 +406,47 @@ cp .env.example .env
 编辑 `.env` 文件，配置必要的参数：
 
 ```bash
-# LLM API 配置（至少配置一个）
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
-DEEPSEEK_API_BASE=https://api.deepseek.com/v1
-DEEPSEEK_MODEL_NAME=deepseek-chat
+# ========== 应用配置 ==========
+APP_NAME=x-langgraph
+APP_ENVIRONMENT=development
+APP_DEBUG=true
 
-# Checkpoint 数据库配置（MySQL）
+# ========== 服务器配置 ==========
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+
+# ========== Checkpoint数据库配置（LangGraph状态持久化）==========
 CHECKPOINT_DB_HOST=localhost
 CHECKPOINT_DB_PORT=3306
 CHECKPOINT_DB_USER=root
-CHECKPOINT_DB_PASSWORD=123456
+CHECKPOINT_DB_PASSWORD=your-password
 CHECKPOINT_DB_NAME=x-langgraph
 
-# API 服务配置
-API_HOST=0.0.0.0
-API_PORT=8000
-API_RELOAD=true
+# ========== 业务数据库配置（如需使用）==========
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your-password
+DB_NAME=x-langgraph
+
+# ========== API 安全配置 ==========
 API_KEY=your-api-key-here          # API 访问密钥（留空则不启用认证）
 
-# 高德地图 API 配置（天气查询）
-AMAP_API_KEY=your-amap-api-key     # 高德地图 API 密钥
+# ========== LLM API 配置（至少配置一个）==========
+DEEPSEEK_API_KEY=your_deepseek_api_key
+DEEPSEEK_API_BASE=https://api.deepseek.com/v1
+DEEPSEEK_MODEL_NAME=deepseek-chat
 
-# 搜索 API 配置（可选）
+DOUBAO_API_KEY=your_doubao_api_key
+DOUBAO_API_BASE=https://ark.cn-beijing.volces.com/api/v3
+DOUBAO_MODEL_NAME=your-doubao-model
+
+ALIYUN_API_KEY=your_aliyun_api_key
+ALIYUN_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
+ALIYUN_MODEL_NAME=qwen-turbo
+
+# ========== 第三方API配置 ==========
+AMAP_API_KEY=your-amap-api-key     # 高德地图 API 密钥（天气查询）
 SEARCH_API_KEY=your-search-api-key
 SEARCH_API_URL=https://api.search.com/v1/search
 ```
@@ -429,11 +481,8 @@ docker run -d \
   -p 3306:3306 \
   mysql:8.0
 
-# 2. 启动 API 服务
-uv run python -m api.main
-
-# 或使用 uvicorn
-uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+# 2. 启动 API 服务（推荐方式）
+uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 # 3. 运行示例
 uv run python -m examples.hello_world
@@ -449,9 +498,9 @@ docker-compose logs -f api    # 查看日志
 docker-compose restart api    # 重启 API
 
 # 本地开发
-uv run python -m api.main              # 启动 API
-uv run python -m examples.hello_world  # 运行示例
-uv run pytest tests/ -v                # 运行测试
+uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload  # 启动 API（推荐）
+uv run python -m examples.hello_world                            # 运行示例
+uv run pytest tests/ -v                                           # 运行测试
 
 # 代码质量
 uv run black src/ tests/               # 代码格式化
@@ -498,7 +547,7 @@ uv run mypy src/                       # 类型检查
 | `/chat` | POST | 同步聊天 |
 | `/chat/stream` | POST | 流式聊天（SSE） |
 | `/approval/resume` | POST | 恢复审批工作流 |
-| `/approval/status/{id}` | GET | 获取审批状态 |
+| `/approval/status/{session_id}` | GET | 获取审批状态 |
 
 ### API 认证
 
@@ -536,26 +585,101 @@ curl http://localhost:8000/health/ready
 
 # 获取指标
 curl http://localhost:8000/metrics
+
+# 恢复审批工作流
+curl -X POST http://localhost:8000/approval/resume \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
+  -d '{"session_id": "test-123", "approved": true, "comments": "同意"}'
+
+# 获取审批状态
+curl http://localhost:8000/approval/status/test-123 \
+  -H "X-API-Key: your-api-key-here"
 ```
 
-## 存储配置
+## 配置管理
 
-### 本地存储（MySQL Checkpointer）
+### 配置加载优先级
 
-用于 LangGraph 工作流状态持久化，支持中断恢复：
+配置支持三种加载方式，优先级从高到低：
 
-```bash
-# .env 配置
-CHECKPOINT_DB_HOST=localhost
-CHECKPOINT_DB_PORT=3306
-CHECKPOINT_DB_USER=root
-CHECKPOINT_DB_PASSWORD=123456
-CHECKPOINT_DB_NAME=x-langgraph
+1. **环境变量**：如 `SERVER_PORT=8080`
+2. **YAML 配置文件**：`config.yaml`（根目录）
+3. **默认配置**：代码中的默认值
+
+### YAML 配置文件示例 (`config.yaml`)
+
+```yaml
+app:
+  name: x-langgraph
+  environment: development
+  debug: true
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  reload: true
+
+logging:
+  level: INFO
+  file_path: logs/x-langgraph.log
+  rotation: 1 day
+  retention: 7 days
+
+checkpoint_db:
+  host: localhost
+  port: 3306
+  user: root
+  password: your-password
+  name: x-langgraph
+
+llm:
+  temperature: 0.0
+  structured: false
+
+deepseek:
+  api_key: your-deepseek-api-key
+  api_base: https://api.deepseek.com/v1
+  model_name: deepseek-chat
+
+doubao:
+  api_key: your-doubao-api-key
+  api_base: https://ark.cn-beijing.volces.com/api/v3
+  model_name: your-doubao-model
+
+aliyun:
+  api_key: your-aliyun-api-key
+  api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+  model_name: qwen-turbo
+
+third_party:
+  amap_api_key: your-amap-api-key
+  search_api_key: your-search-api-key
+  search_api_url: https://api.search.com/v1/search
+  api_key: your-api-key-here
 ```
 
-### 对象存储（可选）
+### 配置类结构
 
-如需 RAG 文档存储，可配置对象存储服务（如 MinIO、阿里云 OSS 等）。
+配置系统采用 dataclass 分层管理：
+
+```
+Settings
+├── server          (ServerConfig)       - 服务器配置
+├── logging         (LoggingConfig)      - 日志配置
+├── cors            (CORSConfig)         - CORS 配置
+├── rate_limit      (RateLimitConfig)    - 限流配置
+├── database        (DatabaseConfig)     - 业务数据库配置
+├── checkpoint_db   (CheckpointDBConfig) - Checkpoint 数据库配置
+├── redis           (RedisConfig)        - Redis 配置
+├── security        (SecurityConfig)     - 安全配置
+├── api_docs        (ApiDocsConfig)      - API 文档配置
+├── llm             (LLMConfig)          - LLM 通用配置
+├── deepseek        (DeepSeekConfig)     - DeepSeek 配置
+├── doubao          (DoubaoConfig)       - 豆包配置
+├── aliyun          (AliyunConfig)       - 阿里云配置
+└── third_party     (ThirdPartyConfig)   - 第三方 API 配置
+```
 
 ## 许可证
 
