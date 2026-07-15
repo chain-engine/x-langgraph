@@ -5,6 +5,7 @@
 **x-langgraph** 是一个生产级的 LangGraph 工作流编排框架，旨在帮助开发者快速构建基于大语言模型的复杂多步骤工作流应用。本项目采用工程化、模块化设计，提供完整的工作流示例和生产级部署方案，可作为企业级应用的参考模板。
 
 **适用场景**：
+
 - 智能客服系统（多轮对话、意图识别、工单流转）
 - RAG 文档问答（知识库检索、上下文构建）
 - 多智能体协作（任务分解、并行执行、结果汇总）
@@ -17,26 +18,26 @@
 
 ### LangGraph 与 LangChain 的关系
 
-| 特性 | LangChain | LangGraph |
-|------|-----------|-----------|
-| 定位 | 通用 LLM 应用开发框架 | 专注工作流编排和状态管理 |
-| 核心能力 | 模型调用、提示管理、工具集成 | 状态图、条件路由、持久化 |
-| 适用场景 | 简单链式调用 | 复杂多步骤工作流 |
-| 状态管理 | 无状态 | 有状态（支持 Checkpointer） |
-| 人机交互 | 不支持 | 支持（interrupt/resume） |
+| 特性   | LangChain      | LangGraph            |
+| ---- | -------------- | -------------------- |
+| 定位   | 通用 LLM 应用开发框架  | 专注工作流编排和状态管理         |
+| 核心能力 | 模型调用、提示管理、工具集成 | 状态图、条件路由、持久化         |
+| 适用场景 | 简单链式调用         | 复杂多步骤工作流             |
+| 状态管理 | 无状态            | 有状态（支持 Checkpointer） |
+| 人机交互 | 不支持            | 支持（interrupt/resume） |
 
 ### LangGraph 核心概念
 
-| 概念 | 说明 | 示例 |
-|------|------|------|
-| **StateGraph** | 状态图，工作流的核心容器 | `StateGraph(MyState)` |
-| **State** | 工作流状态，使用 TypedDict 定义 | `class MyState(TypedDict): ...` |
-| **Node** | 节点，执行具体任务的函数 | `def my_node(state): return {...}` |
-| **Edge** | 边，定义节点间的流转 | `graph.add_edge("a", "b")` |
-| **Conditional Edge** | 条件边，根据状态动态路由 | `graph.add_conditional_edges(...)` |
-| **Checkpointer** | 状态持久化器 | `MemorySaver()` / `AsyncMySQLSaver` |
-| **interrupt** | 中断执行，等待外部输入 | `interrupt({"type": "approval"})` |
-| **Command** | 恢复执行的命令 | `Command(resume={...})` |
+| 概念                   | 说明                    | 示例                                  |
+| -------------------- | --------------------- | ----------------------------------- |
+| **StateGraph**       | 状态图，工作流的核心容器          | `StateGraph(MyState)`               |
+| **State**            | 工作流状态，使用 TypedDict 定义 | `class MyState(TypedDict): ...`     |
+| **Node**             | 节点，执行具体任务的函数          | `def my_node(state): return {...}`  |
+| **Edge**             | 边，定义节点间的流转            | `graph.add_edge("a", "b")`          |
+| **Conditional Edge** | 条件边，根据状态动态路由          | `graph.add_conditional_edges(...)`  |
+| **Checkpointer**     | 状态持久化器                | `MemorySaver()` / `AsyncMySQLSaver` |
+| **interrupt**        | 中断执行，等待外部输入           | `interrupt({"type": "approval"})`   |
+| **Command**          | 恢复执行的命令               | `Command(resume={...})`             |
 
 ### 工作流基类设计
 
@@ -420,17 +421,15 @@ CHECKPOINT_DB_HOST=localhost
 CHECKPOINT_DB_PORT=3306
 CHECKPOINT_DB_USER=root
 CHECKPOINT_DB_PASSWORD=your-password
-CHECKPOINT_DB_NAME=x-langgraph
+CHECKPOINT_DB_NAME=langgraph
 
 # ========== 业务数据库配置（如需使用）==========
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your-password
-DB_NAME=x-langgraph
+DB_NAME=langgraph
 
-# ========== API 安全配置 ==========
-API_KEY=your-api-key-here          # API 访问密钥（留空则不启用认证）
 
 # ========== LLM API 配置（至少配置一个）==========
 DEEPSEEK_API_KEY=your_deepseek_api_key
@@ -467,8 +466,9 @@ curl http://localhost:8000/health
 ```
 
 服务启动后：
-- API 地址: http://localhost:8000
-- API 文档: http://localhost:8000/docs
+
+- API 地址: <http://localhost:8000>
+- API 文档: <http://localhost:8000/docs>
 
 #### 方式二：本地开发
 
@@ -510,44 +510,44 @@ uv run mypy src/                       # 类型检查
 
 ## 技术栈
 
-| 分类 | 技术 | 说明 |
-|------|------|------|
-| **Web 框架** | FastAPI | 高性能异步 Web 框架 |
-| **ASGI 服务器** | Uvicorn | 支持 SSE 流式响应 |
-| **LLM 框架** | LangGraph | 工作流编排核心 |
-| | LangChain | 模型调用、工具集成 |
-| **数据存储** | MySQL | Checkpointer 状态持久化 |
-| | SQLAlchemy | ORM 框架 |
-| **数据验证** | Pydantic | 数据模型、配置管理 |
-| **日志** | Loguru | 结构化日志 |
-| **HTTP 客户端** | httpx | 异步 HTTP 请求 |
-| **部署工具** | Docker | 容器化部署 |
-| | Docker Compose | 多容器编排 |
-| **包管理** | uv | 快速 Python 包管理器 |
+| 分类           | 技术             | 说明                 |
+| ------------ | -------------- | ------------------ |
+| **Web 框架**   | FastAPI        | 高性能异步 Web 框架       |
+| **ASGI 服务器** | Uvicorn        | 支持 SSE 流式响应        |
+| **LLM 框架**   | LangGraph      | 工作流编排核心            |
+| <br />       | LangChain      | 模型调用、工具集成          |
+| **数据存储**     | MySQL          | Checkpointer 状态持久化 |
+| <br />       | SQLAlchemy     | ORM 框架             |
+| **数据验证**     | Pydantic       | 数据模型、配置管理          |
+| **日志**       | Loguru         | 结构化日志              |
+| **HTTP 客户端** | httpx          | 异步 HTTP 请求         |
+| **部署工具**     | Docker         | 容器化部署              |
+| <br />       | Docker Compose | 多容器编排              |
+| **包管理**      | uv             | 快速 Python 包管理器     |
 
 ## API 文档
 
 服务启动后，可通过以下地址访问 API 文档：
 
-| 文档类型 | 地址 | 说明 |
-|----------|------|------|
-| Swagger UI | http://localhost:8000/docs | 交互式 API 文档 |
-| ReDoc | http://localhost:8000/redoc | 只读 API 文档 |
-| OpenAPI JSON | http://localhost:8000/openapi.json | OpenAPI 规范文件 |
+| 文档类型         | 地址                                   | 说明           |
+| ------------ | ------------------------------------ | ------------ |
+| Swagger UI   | <http://localhost:8000/docs>         | 交互式 API 文档   |
+| ReDoc        | <http://localhost:8000/redoc>        | 只读 API 文档    |
+| OpenAPI JSON | <http://localhost:8000/openapi.json> | OpenAPI 规范文件 |
 
 ### 核心 API 接口
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/` | GET | 健康检查 |
-| `/health` | GET | 健康检查 |
-| `/health/live` | GET | Liveness 检查（服务是否运行） |
-| `/health/ready` | GET | Readiness 检查（依赖是否就绪） |
-| `/metrics` | GET | Prometheus 指标 |
-| `/chat` | POST | 同步聊天 |
-| `/chat/stream` | POST | 流式聊天（SSE） |
-| `/approval/resume` | POST | 恢复审批工作流 |
-| `/approval/status/{session_id}` | GET | 获取审批状态 |
+| 接口                              | 方法   | 说明                   |
+| ------------------------------- | ---- | -------------------- |
+| `/`                             | GET  | 健康检查                 |
+| `/health`                       | GET  | 健康检查                 |
+| `/health/live`                  | GET  | Liveness 检查（服务是否运行）  |
+| `/health/ready`                 | GET  | Readiness 检查（依赖是否就绪） |
+| `/metrics`                      | GET  | Prometheus 指标        |
+| `/chat`                         | POST | 同步聊天                 |
+| `/chat/stream`                  | POST | 流式聊天（SSE）            |
+| `/approval/resume`              | POST | 恢复审批工作流              |
+| `/approval/status/{session_id}` | GET  | 获取审批状态               |
 
 ### API 认证
 
@@ -697,10 +697,10 @@ Settings
 ## 联系方式
 
 - **作者**: John Young
-- **邮箱**: john.young@foxmail.com
-- **Gitee**: https://gitee.com/yeyushilai
-- **GitHub**: https://github.com/yeyushilai
+- **邮箱**: <john.young@foxmail.com>
+- **Gitee**: <https://gitee.com/yeyushilai>
+- **GitHub**: <https://github.com/yeyushilai>
 
----
+***
 
 **让我们一起探索 LangGraph 的无限可能！** 🚀

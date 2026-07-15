@@ -3,15 +3,15 @@
 Prometheus 指标路由
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 router = APIRouter()
 
 
-@router.get("/metrics")
-async def metrics() -> str:
+@router.get("/metrics", response_class=Response)
+async def metrics() -> Response:
     """Prometheus 指标端点"""
-    from main import _rate_limit_store
+    from core.security import _rate_limit_store
 
     lines = []
     lines.append("# HELP x_langgraph_requests_total Total requests")
@@ -22,4 +22,4 @@ async def metrics() -> str:
     lines.append("# TYPE x_langgraph_active_clients gauge")
     lines.append(f"x_langgraph_active_clients {len(_rate_limit_store)}")
 
-    return "\n".join(lines)
+    return Response(content="\n".join(lines), media_type="text/plain")

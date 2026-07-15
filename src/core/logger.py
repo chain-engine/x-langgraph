@@ -20,7 +20,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 logger.remove()
 
-log_file_path: str = os.path.join(LOG_DIR, f"{PROJECT_NAME}{{time:YYYYMMDDhh}}.log")
+log_file_path: str = os.path.join(LOG_DIR, f"{PROJECT_NAME}_{{time:YYYY-MM-DD-hh}}.log")
 
 logger.add(
     log_file_path,

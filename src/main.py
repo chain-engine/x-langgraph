@@ -45,7 +45,6 @@ async def lifespan(app: FastAPI):
     logger.info("LangGraph API 服务启动")
     logger.info(f"API 地址: http://{settings.API_HOST}:{settings.API_PORT}")
     logger.info(f"调试模式: {settings.DEBUG}")
-    logger.info(f"API Key 认证: {'启用' if settings.API_KEY else '未启用'}")
     logger.info("=" * 50)
 
     register_services()
