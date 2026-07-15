@@ -23,51 +23,6 @@ from services.approval_service import ApprovalService
 from repositories.workflow_repository import WorkflowRepository
 
 
-async def verify_api_key(request: Request):
-    """
-    API Key 认证依赖
-
-    检查请求头中的 X-API-Key 是否有效
-    """
-    api_key = request.headers.get("X-API-Key")
-
-    if settings.API_KEY and api_key != settings.API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API Key"
-        )
-    return api_key
-
-
-_rate_limit_store = {}
-
-
-async def rate_limit(request: Request):
-    """
-    速率限制依赖
-
-    限制每个 IP 每分钟最多 60 次请求
-    """
-    client_ip = request.client.host
-
-    if client_ip not in _rate_limit_store:
-        _rate_limit_store[client_ip] = {"count": 0, "window_start": 0}
-
-    import time
-    now = time.time()
-    window = 60
-
-    if now - _rate_limit_store[client_ip]["window_start"] > window:
-        _rate_limit_store[client_ip] = {"count": 1, "window_start": now}
-    else:
-        _rate_limit_store[client_ip]["count"] += 1
-        if _rate_limit_store[client_ip]["count"] > 60:
-            raise HTTPException(
-                status_code=429,
-                detail="Rate limit exceeded"
-            )
-
-
 def register_services():
     """
     注册所有服务到 IOC 容器
