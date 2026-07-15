@@ -7,32 +7,40 @@
 
 from fastapi import APIRouter, HTTPException
 from langgraph.types import Command
+from langgraph.checkpoint.memory import MemorySaver
 
 from api.schemas import ApprovalRequest, ApprovalResponse
 from core.logger import logger
 from workflows.customer_service import create_customer_service_workflow
-from langgraph.checkpoint.memory import MemorySaver
 
 router = APIRouter(prefix="/approval", tags=["approval"])
 
-# 存储工作流实例（生产环境应使用 Redis 或数据库）
-_workflows: dict = {}
+_checkpointer = None
 
 
-def _get_or_create_workflow(session_id: str):
+def set_checkpointer(checkpointer):
     """
-    获取或创建工作流实例
+    设置全局 Checkpointer
 
     Args:
-        session_id: 会话 ID
+        checkpointer: AsyncMySQLSaver 实例
+    """
+    global _checkpointer
+    _checkpointer = checkpointer
+    logger.info("审批路由 Checkpointer 已设置")
+
+
+def _create_workflow():
+    """
+    创建工作流实例（使用全局 Checkpointer）
 
     Returns:
         工作流实例
     """
-    if session_id not in _workflows:
-        checkpointer = MemorySaver()
-        _workflows[session_id] = create_customer_service_workflow(checkpointer)
-    return _workflows[session_id]
+    if _checkpointer is None:
+        logger.warning("Checkpointer 未初始化，使用 MemorySaver（开发模式）")
+        return create_customer_service_workflow(MemorySaver())
+    return create_customer_service_workflow(_checkpointer)
 
 
 @router.post("/resume", response_model=ApprovalResponse)
@@ -51,10 +59,9 @@ async def resume_workflow(request: ApprovalRequest) -> ApprovalResponse:
     logger.info(f"收到审批请求: session_id={request.session_id}, approved={request.approved}")
 
     try:
-        graph = _get_or_create_workflow(request.session_id)
+        graph = _create_workflow()
         config = {"configurable": {"thread_id": request.session_id}}
 
-        # 使用 Command 异步恢复执行
         result = await graph.ainvoke(
             Command(
                 resume={
@@ -89,10 +96,9 @@ async def get_approval_status(session_id: str) -> dict:
         审批状态
     """
     try:
-        graph = _get_or_create_workflow(session_id)
+        graph = _create_workflow()
         config = {"configurable": {"thread_id": session_id}}
 
-        # 异步获取当前状态
         state = await graph.aget_state(config)
 
         return {

@@ -389,6 +389,14 @@ CHECKPOINT_DB_NAME=x-langgraph
 API_HOST=0.0.0.0
 API_PORT=8000
 API_RELOAD=true
+API_KEY=your-api-key-here          # API 访问密钥（留空则不启用认证）
+
+# 高德地图 API 配置（天气查询）
+AMAP_API_KEY=your-amap-api-key     # 高德地图 API 密钥
+
+# 搜索 API 配置（可选）
+SEARCH_API_KEY=your-search-api-key
+SEARCH_API_URL=https://api.search.com/v1/search
 ```
 
 ### 服务启动
@@ -484,23 +492,50 @@ uv run mypy src/                       # 类型检查
 |------|------|------|
 | `/` | GET | 健康检查 |
 | `/health` | GET | 健康检查 |
+| `/health/live` | GET | Liveness 检查（服务是否运行） |
+| `/health/ready` | GET | Readiness 检查（依赖是否就绪） |
+| `/metrics` | GET | Prometheus 指标 |
 | `/chat` | POST | 同步聊天 |
 | `/chat/stream` | POST | 流式聊天（SSE） |
 | `/approval/resume` | POST | 恢复审批工作流 |
 | `/approval/status/{id}` | GET | 获取审批状态 |
 
+### API 认证
+
+当配置 `API_KEY` 后，所有 `/chat` 和 `/approval` 接口需要在请求头中携带 API Key：
+
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
+  -d '{"message": "你好", "session_id": "test-123"}'
+```
+
+### 速率限制
+
+- 默认限制：每个 IP 每分钟最多 60 次请求
+- 超过限制返回 HTTP 429
+
 ### 接口示例
 
 ```bash
-# 同步聊天
+# 同步聊天（带认证）
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
   -d '{"message": "北京天气", "session_id": "test-123", "workflow": "simple_router"}'
 
 # 流式聊天（SSE）
 curl -X POST http://localhost:8000/chat/stream \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
   -d '{"message": "你好", "session_id": "test-456"}'
+
+# 健康检查（Readiness）
+curl http://localhost:8000/health/ready
+
+# 获取指标
+curl http://localhost:8000/metrics
 ```
 
 ## 存储配置

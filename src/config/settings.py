@@ -76,9 +76,14 @@ class Settings(BaseSettings):
     API_HOST: str = Field(default="0.0.0.0", description="API 服务主机")
     API_PORT: int = Field(default=8000, description="API 服务端口")
     API_RELOAD: bool = Field(default=False, description="API 热重载")
+    API_KEY: str = Field(default="", description="API 访问密钥（留空则不启用认证）")
 
     # ========== 高德地图 API 配置 ==========
     AMAP_API_KEY: str = Field(default="", description="高德地图 API 密钥")
+
+    # ========== 搜索 API 配置 ==========
+    SEARCH_API_KEY: str = Field(default="", description="搜索服务 API 密钥")
+    SEARCH_API_URL: str = Field(default="", description="搜索服务 API 地址")
 
     # ========== 通用配置 ==========
     TEMPERATURE: float = Field(default=0.0, description="LLM 温度参数")
