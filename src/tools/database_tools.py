@@ -16,7 +16,7 @@ from typing import Optional, Any
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from config.settings import settings
+from core.config import settings
 from core.logger import logger
 
 

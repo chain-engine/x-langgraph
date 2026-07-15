@@ -11,7 +11,7 @@ from typing import Optional
 
 from langchain_core.tools import tool
 from core.logger import logger
-from config.settings import settings
+from core.config import settings
 
 
 @tool

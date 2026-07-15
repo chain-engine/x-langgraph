@@ -13,7 +13,7 @@ from workflows.simple_router.state import SimpleRouterState, RouteDecision
 from tools.search_tools import web_search_tool
 from tools.calculation_tools import calculator_tool
 from tools.weather_tools import weather_query_tool
-from config.settings import settings
+from core.config import settings
 from core.logger import logger
 
 

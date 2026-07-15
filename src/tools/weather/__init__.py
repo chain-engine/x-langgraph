@@ -23,7 +23,7 @@ from tools.weather.base import WeatherProvider, WeatherInfo
 from tools.weather.mock_provider import MockWeatherProvider
 from tools.weather.amap_provider import AmapWeatherProvider
 
-from config.settings import settings
+from core.config import settings
 from core.logger import logger
 
 

@@ -15,7 +15,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from config.settings import settings
+from core.config import settings
 from core.logger import logger
 
 

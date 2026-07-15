@@ -3,6 +3,7 @@
 聊天路由
 
 提供同步和流式聊天接口（异步实现）
+API层只做接口注册和转发，具体业务逻辑由Service层处理
 """
 
 import json
@@ -10,39 +11,14 @@ from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
 
-from api.schemas import ChatRequest, ChatResponse, StreamEvent
+from constants.schemas import ChatRequest, ChatResponse, StreamEvent
 from core.logger import logger
-from workflows.simple_router import create_simple_router_workflow
-from workflows.customer_service import create_customer_service_workflow
+from services.chat_service import ChatService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-
-def _get_workflow(workflow_type: str, checkpointer=None):
-    """
-    获取工作流实例
-
-    Args:
-        workflow_type: 工作流类型
-        checkpointer: 状态持久化器
-
-    Returns:
-        编译后的工作流
-    """
-    workflows = {
-        "simple_router": lambda: create_simple_router_workflow(),
-        "customer_service": lambda: create_customer_service_workflow(checkpointer),
-    }
-
-    if workflow_type not in workflows:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown workflow: {workflow_type}. Available: {list(workflows.keys())}",
-        )
-
-    return workflows[workflow_type]()
+chat_service = ChatService()
 
 
 @router.post("", response_model=ChatResponse)
@@ -59,24 +35,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
     logger.info(f"收到聊天请求: session_id={request.session_id}, workflow={request.workflow}")
 
     try:
-        graph = _get_workflow(request.workflow)
-        config = {"configurable": {"thread_id": request.session_id}}
-
-        # 异步执行工作流
-        result = await graph.ainvoke(
-            {"messages": [HumanMessage(content=request.message)]},
-            config=config,
-        )
-
-        # 提取响应
-        response_content = ""
-        if "messages" in result and result["messages"]:
-            last_message = result["messages"][-1]
-            response_content = last_message.content if hasattr(last_message, "content") else str(last_message)
-
+        result = await chat_service.create(request.model_dump())
+        
         return ChatResponse(
-            response=response_content,
-            session_id=request.session_id,
+            response=result.get("response", ""),
+            session_id=result.get("session_id", request.session_id),
             node=result.get("node"),
         )
 
@@ -100,24 +63,18 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
     async def generate() -> AsyncGenerator[str, None]:
         try:
-            graph = _get_workflow(request.workflow)
-            config = {"configurable": {"thread_id": request.session_id}}
-
-            # 异步流式执行工作流
-            async for event in graph.astream(
-                {"messages": [HumanMessage(content=request.message)]},
-                config=config,
-                stream_mode="updates",
+            async for event in chat_service.stream(
+                request.workflow,
+                request.message,
+                request.session_id
             ):
-                for node_name, node_output in event.items():
-                    stream_event = StreamEvent(
-                        event="node_update",
-                        node=node_name,
-                        data=node_output,
-                    )
-                    yield f"data: {stream_event.model_dump_json()}\n\n"
+                stream_event = StreamEvent(
+                    event=event.get("event", "node_update"),
+                    node=event.get("node"),
+                    data=event.get("data"),
+                )
+                yield f"data: {stream_event.model_dump_json()}\n\n"
 
-            # 发送完成事件
             yield f"data: {json.dumps({'event': 'done'})}\n\n"
 
         except Exception as e:
