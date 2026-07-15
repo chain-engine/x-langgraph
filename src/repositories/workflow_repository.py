@@ -39,7 +39,7 @@ class WorkflowRepository:
             Any: Checkpointer 实例
         """
         if self._checkpointer is None:
-            from core.checkpointer import create_checkpointer
+            from workflows.checkpointer import create_checkpointer
             self._checkpointer = await create_checkpointer()
         return self._checkpointer
 

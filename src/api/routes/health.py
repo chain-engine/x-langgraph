@@ -37,11 +37,10 @@ async def health_ready() -> HealthReadyResponse:
     checks = []
 
     try:
-        from core.checkpointer import get_mysql_connection_string
         from sqlalchemy.ext.asyncio import create_async_engine
         from sqlalchemy import text
 
-        connection_string = get_mysql_connection_string()
+        connection_string = settings.get_checkpoint_db_url()
         engine = create_async_engine(connection_string)
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))

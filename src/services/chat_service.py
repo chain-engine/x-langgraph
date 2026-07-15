@@ -7,7 +7,7 @@
 
 from typing import Any, Optional, AsyncGenerator
 
-from common.base import Service
+from .base import Service
 from repositories.workflow_repository import WorkflowRepository
 from core.logger import logger
 from core.config import settings

@@ -7,7 +7,7 @@
 
 from typing import Any, Optional
 
-from common.base import Service
+from .base import Service
 from repositories.workflow_repository import WorkflowRepository
 from core.logger import logger
 
@@ -117,7 +117,7 @@ class ApprovalService(Service):
         """
         from langgraph.types import Command
         from workflows.customer_service import create_customer_service_workflow
-        from core.checkpointer import create_checkpointer
+        from workflows.checkpointer import create_checkpointer
 
         try:
             checkpointer = await create_checkpointer()
@@ -159,7 +159,7 @@ class ApprovalService(Service):
             dict: 审批状态
         """
         from workflows.customer_service import create_customer_service_workflow
-        from core.checkpointer import create_checkpointer
+        from workflows.checkpointer import create_checkpointer
 
         try:
             checkpointer = await create_checkpointer()
