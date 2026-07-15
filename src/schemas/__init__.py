@@ -4,8 +4,8 @@
 """
 
 from .chat import ChatRequest, ChatResponse, StreamEvent
-from .approval import ApprovalRequest, ApprovalResponse, ThreadInfo
-from .health import HealthResponse
+from .approval import ApprovalRequest, ApprovalResponse, ApprovalStatusResponse
+from .health import HealthResponse, HealthLiveResponse, HealthReadyResponse
 
 __all__ = [
     "ChatRequest",
@@ -13,6 +13,8 @@ __all__ = [
     "StreamEvent",
     "ApprovalRequest",
     "ApprovalResponse",
-    "ThreadInfo",
+    "ApprovalStatusResponse",
     "HealthResponse",
+    "HealthLiveResponse",
+    "HealthReadyResponse",
 ]

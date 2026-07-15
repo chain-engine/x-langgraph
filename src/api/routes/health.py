@@ -6,8 +6,7 @@
 from fastapi import APIRouter
 
 from core.config import settings
-from core.response import success_response
-from schemas.health import HealthResponse
+from schemas.health import HealthResponse, HealthLiveResponse, HealthReadyResponse
 
 router = APIRouter()
 
@@ -24,14 +23,16 @@ async def health() -> HealthResponse:
     return HealthResponse()
 
 
-@router.get("/health/live")
-async def health_live() -> dict:
+@router.get("/health/live", response_model=HealthLiveResponse)
+async def health_live() -> HealthLiveResponse:
     """Liveness 健康检查"""
-    return success_response(data={"service": "x-langgraph-api"})
+    return HealthLiveResponse(
+        data={"service": "x-langgraph-api"}
+    )
 
 
-@router.get("/health/ready")
-async def health_ready() -> dict:
+@router.get("/health/ready", response_model=HealthReadyResponse)
+async def health_ready() -> HealthReadyResponse:
     """Readiness 健康检查"""
     checks = []
 
@@ -58,8 +59,8 @@ async def health_ready() -> dict:
 
     all_ok = all(check["status"] == "ok" for check in checks)
 
-    return {
-        "status": "ok" if all_ok else "degraded",
-        "checks": checks,
-        "service": "x-langgraph-api"
-    }
+    return HealthReadyResponse(
+        status="ok" if all_ok else "degraded",
+        checks=checks,
+        service="x-langgraph-api"
+    )

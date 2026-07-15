@@ -8,7 +8,7 @@ API层只做接口注册和转发，具体业务逻辑由Service层处理
 
 from fastapi import APIRouter, HTTPException
 
-from schemas.approval import ApprovalRequest, ApprovalResponse
+from schemas.approval import ApprovalRequest, ApprovalResponse, ApprovalStatusResponse
 from core.logger import logger
 from core.container import container
 from services.approval_service import ApprovalService
@@ -49,8 +49,8 @@ async def resume_workflow(request: ApprovalRequest) -> ApprovalResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/status/{session_id}")
-async def get_approval_status(session_id: str) -> dict:
+@router.get("/status/{session_id}", response_model=ApprovalStatusResponse)
+async def get_approval_status(session_id: str) -> ApprovalStatusResponse:
     """
     获取会话的审批状态
 
@@ -63,7 +63,7 @@ async def get_approval_status(session_id: str) -> dict:
     approval_service = container.resolve(ApprovalService)
     try:
         result = await approval_service.get_approval_status(session_id)
-        return result
+        return ApprovalStatusResponse(**result)
 
     except Exception as e:
         logger.error(f"获取审批状态失败: {e}")
