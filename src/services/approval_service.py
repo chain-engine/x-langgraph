@@ -165,7 +165,6 @@ class ApprovalService(Service):
             checkpointer = await create_checkpointer()
             graph = create_customer_service_workflow(checkpointer)
             config = {"configurable": {"thread_id": session_id}}
-
             state = await graph.aget_state(config)
 
             return {

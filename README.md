@@ -416,20 +416,12 @@ APP_DEBUG=true
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
 
-# ========== Checkpoint数据库配置（LangGraph状态持久化）==========
-CHECKPOINT_DB_HOST=localhost
-CHECKPOINT_DB_PORT=3306
-CHECKPOINT_DB_USER=root
-CHECKPOINT_DB_PASSWORD=your-password
-CHECKPOINT_DB_NAME=langgraph
-
-# ========== 业务数据库配置（如需使用）==========
+# ========== 数据库配置（业务数据 + LangGraph 状态持久化共用）==========
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your-password
 DB_NAME=langgraph
-
 
 # ========== LLM API 配置（至少配置一个）==========
 DEEPSEEK_API_KEY=your_deepseek_api_key

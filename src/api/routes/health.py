@@ -40,13 +40,18 @@ async def health_ready() -> HealthReadyResponse:
         from sqlalchemy.ext.asyncio import create_async_engine
         from sqlalchemy import text
 
-        connection_string = settings.get_checkpoint_db_url()
+        connection_string = settings.get_db_url(async_mode=True)
         engine = create_async_engine(connection_string)
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
         checks.append({"name": "mysql", "status": "ok"})
+    except ImportError as e:
+        if "asyncmy" in str(e):
+            checks.append({"name": "mysql", "status": "unavailable", "error": "asyncmy 未安装，请运行 pip install asyncmy"})
+        else:
+            checks.append({"name": "mysql", "status": "failed", "error": str(e)})
     except Exception as e:
-        checks.append({"name": "mysql", "status": "failed", "error": str(e)})
+        checks.append({"name": "mysql", "status": "degraded", "error": f"连接失败，使用 MemorySaver 降级: {e}"})
 
     try:
         from llm.providers import get_llm_provider

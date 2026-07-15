@@ -33,11 +33,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - CHECKPOINT_DB_HOST=mysql
-      - CHECKPOINT_DB_PORT=3306
-      - CHECKPOINT_DB_USER=root
-      - CHECKPOINT_DB_PASSWORD=123456
-      - CHECKPOINT_DB_NAME=x-langgraph
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - DB_NAME=x-langgraph
     env_file:
       - .env
     depends_on:

@@ -336,19 +336,12 @@ APP_DEBUG=true
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
 
-# Checkpoint Database Configuration (LangGraph State Persistence)
-CHECKPOINT_DB_HOST=localhost
-CHECKPOINT_DB_PORT=3306
-CHECKPOINT_DB_USER=root
-CHECKPOINT_DB_PASSWORD=your-password
-CHECKPOINT_DB_NAME=x-langgraph
-
-# Business Database Configuration (if needed)
+# Database Configuration (Shared for Business Data + LangGraph State Persistence)
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your-password
-DB_NAME=x-langgraph
+DB_NAME=langgraph
 
 # API Security Configuration
 API_KEY=your-api-key-here          # API access key (leave empty to disable auth)

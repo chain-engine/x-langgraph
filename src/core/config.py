@@ -10,7 +10,10 @@ from pathlib import Path
 from dataclasses import dataclass, field
 import yaml
 
+from dotenv import load_dotenv
 from constants.enums import Environment
+
+load_dotenv()
 
 
 @dataclass
@@ -67,16 +70,6 @@ class DatabaseConfig:
     pool_recycle: int = 3600
     echo: bool = False
 
-
-@dataclass
-class CheckpointDBConfig:
-    """Checkpoint数据库配置（LangGraph状态持久化）"""
-    enabled: bool = False
-    host: str = "localhost"
-    port: int = 3306
-    user: str = "root"
-    password: str = ""
-    name: str = "x-langgraph"
 
 
 @dataclass
@@ -258,14 +251,6 @@ class Settings:
                 'pool_recycle': 3600,
                 'echo': False
             },
-            'checkpoint_db': {
-                'enabled': False,
-                'host': 'localhost',
-                'port': 3306,
-                'user': 'root',
-                'password': '',
-                'name': 'x-langgraph'
-            },
             'redis': {
                 'enabled': False,
                 'host': 'localhost',
@@ -371,17 +356,6 @@ class Settings:
         if (value := os.environ.get('DB_NAME')):
             config['database']['name'] = value
 
-        if (value := os.environ.get('CHECKPOINT_DB_HOST')):
-            config['checkpoint_db']['host'] = value
-        if (value := os.environ.get('CHECKPOINT_DB_PORT')):
-            config['checkpoint_db']['port'] = _to_int(value)
-        if (value := os.environ.get('CHECKPOINT_DB_USER')):
-            config['checkpoint_db']['user'] = value
-        if (value := os.environ.get('CHECKPOINT_DB_PASSWORD')):
-            config['checkpoint_db']['password'] = value
-        if (value := os.environ.get('CHECKPOINT_DB_NAME')):
-            config['checkpoint_db']['name'] = value
-
         if (value := os.environ.get('REDIS_HOST')):
             config['redis']['host'] = value
         if (value := os.environ.get('REDIS_PORT')):
@@ -444,7 +418,6 @@ class Settings:
         self.cors = CORSConfig(**self._config['cors'])
         self.rate_limit = RateLimitConfig(**self._config['rate_limit'])
         self.database = DatabaseConfig(**self._config['database'])
-        self.checkpoint_db = CheckpointDBConfig(**self._config['checkpoint_db'])
         self.redis = RedisConfig(**self._config['redis'])
         self.security = SecurityConfig(**self._config['security'])
         self.api_docs = ApiDocsConfig(**self._config['api_docs'])
@@ -500,20 +473,15 @@ class Settings:
             return True
         return False
 
-    def get_checkpoint_db_url(self) -> str:
-        """获取 Checkpoint 数据库连接 URL（asyncmy 驱动）"""
+    def get_db_url(self, async_mode: bool = False) -> str:
+        """获取数据库连接 URL
+        
+        Args:
+            async_mode: 是否使用异步驱动（asyncmy），默认使用同步驱动（pymysql）
+        """
+        driver = "asyncmy" if async_mode else "pymysql"
         return (
-            f"mysql+asyncmy://{self.checkpoint_db.user}:"
-            f"{self.checkpoint_db.password}@"
-            f"{self.checkpoint_db.host}:"
-            f"{self.checkpoint_db.port}/"
-            f"{self.checkpoint_db.name}"
-        )
-
-    def get_db_url(self) -> str:
-        """获取业务数据库连接 URL"""
-        return (
-            f"mysql+pymysql://{self.database.user}:"
+            f"mysql+{driver}://{self.database.user}:"
             f"{self.database.password}@"
             f"{self.database.host}:"
             f"{self.database.port}/"
@@ -550,16 +518,6 @@ class Settings:
     def API_KEY(self) -> str:
         """兼容旧代码的 API 访问密钥属性"""
         return self.third_party.api_key
-
-    @property
-    def CHECKPOINT_DB_HOST(self) -> str:
-        """兼容旧代码的 Checkpoint 数据库主机属性"""
-        return self.checkpoint_db.host
-
-    @property
-    def CHECKPOINT_DB_PORT(self) -> int:
-        """兼容旧代码的 Checkpoint 数据库端口属性"""
-        return self.checkpoint_db.port
 
     @property
     def LOG_LEVEL(self) -> str:

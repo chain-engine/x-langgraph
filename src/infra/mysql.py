@@ -38,7 +38,7 @@ class MySQLSessionFactory:
 
         try:
             db_url = settings.get_db_url()
-            checkpoint_db_url = settings.get_checkpoint_db_url()
+            async_db_url = settings.get_db_url(async_mode=True)
 
             self._engine = create_engine(
                 db_url,
@@ -50,7 +50,7 @@ class MySQLSessionFactory:
             )
 
             self._async_engine = create_async_engine(
-                checkpoint_db_url,
+                async_db_url,
                 pool_size=10,
                 max_overflow=20,
                 pool_timeout=30,

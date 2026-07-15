@@ -33,10 +33,7 @@ class WorkflowRepository:
 
     async def get_checkpointer(self) -> Any:
         """
-        获取 Checkpointer 实例
-
-        Returns:
-            Any: Checkpointer 实例
+        获取 Checkpointer 实例（延迟初始化）
         """
         if self._checkpointer is None:
             from workflows.checkpointer import create_checkpointer
@@ -46,12 +43,6 @@ class WorkflowRepository:
     async def get_state(self, thread_id: str) -> Optional[Dict[str, Any]]:
         """
         获取工作流状态
-
-        Args:
-            thread_id: 会话 ID
-
-        Returns:
-            Optional[Dict[str, Any]]: 工作流状态数据
         """
         try:
             checkpointer = await self.get_checkpointer()

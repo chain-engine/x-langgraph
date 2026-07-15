@@ -35,7 +35,7 @@ class BaseWorkflow(ABC):
         初始化工作流
 
         Args:
-            checkpointer: 状态持久化器（可选）
+            checkpointer: Checkpointer（检查点器），用于持久化工作流状态
         """
         self.checkpointer = checkpointer
         self._graph = None
