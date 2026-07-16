@@ -8,6 +8,7 @@
 from typing import Any, Optional
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from models.workflow import (
     WorkflowDefinition,
@@ -78,11 +79,17 @@ class WorkflowDefinitionRepository:
     async def get_by_name(self, name: str) -> Optional[dict[str, Any]]:
         """根据名称获取工作流定义"""
         try:
-            result = await session_factory.execute_async(
-                lambda session: session.execute(
-                    select(WorkflowDefinition).filter_by(name=name)
-                ).scalar_one_or_none()
-            )
+            async def query(session):
+                result = await session.execute(
+                    select(WorkflowDefinition)
+                    .filter_by(name=name)
+                    .options(selectinload(WorkflowDefinition.nodes))
+                    .options(selectinload(WorkflowDefinition.edges))
+                    .options(selectinload(WorkflowDefinition.state_fields))
+                )
+                return result.scalar_one_or_none()
+
+            result = await session_factory.execute_async(query)
             if result is None:
                 return None
             return self._model_to_dict(result)
@@ -93,9 +100,16 @@ class WorkflowDefinitionRepository:
     async def list_all(self) -> list[dict[str, Any]]:
         """列出所有工作流定义"""
         try:
-            results = await session_factory.execute_async(
-                lambda session: session.execute(select(WorkflowDefinition)).scalars().all()
-            )
+            async def query(session):
+                result = await session.execute(
+                    select(WorkflowDefinition)
+                    .options(selectinload(WorkflowDefinition.nodes))
+                    .options(selectinload(WorkflowDefinition.edges))
+                    .options(selectinload(WorkflowDefinition.state_fields))
+                )
+                return result.scalars().all()
+
+            results = await session_factory.execute_async(query)
             return [self._model_to_dict(r) for r in results]
         except Exception as e:
             logger.error(f"Failed to list workflow definitions: {e}")
@@ -148,10 +162,13 @@ class WorkflowDefinitionRepository:
                 )
                 instance.state_fields.append(field)
 
-            result = await session_factory.transaction_async(
-                lambda session: session.add(instance) or instance
-            )
+            async def create_func(session):
+                session.add(instance)
+                await session.flush()
+                await session.refresh(instance)
+                return instance
 
+            result = await session_factory.transaction_async(create_func)
             logger.info(f"Workflow definition created: {data['name']}")
             return self._model_to_dict(result)
         except Exception as e:
@@ -166,8 +183,12 @@ class WorkflowDefinitionRepository:
                 return None
 
             async def update_func(session):
-                instance = await session.execute(
-                    select(WorkflowDefinition).filter_by(name=name)
+                instance: WorkflowDefinition | None = await session.execute(
+                    select(WorkflowDefinition)
+                    .filter_by(name=name)
+                    .options(selectinload(WorkflowDefinition.nodes))
+                    .options(selectinload(WorkflowDefinition.edges))
+                    .options(selectinload(WorkflowDefinition.state_fields))
                 ).scalar_one_or_none()
                 if instance is None:
                     return None
@@ -225,7 +246,8 @@ class WorkflowDefinitionRepository:
                         )
                         instance.state_fields.append(field)
 
-                await session.commit()
+                await session.flush()
+                await session.refresh(instance)
                 return instance
 
             result = await session_factory.transaction_async(update_func)

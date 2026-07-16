@@ -129,7 +129,10 @@ class MySQLSessionFactory:
         """
         session = await self.get_async_session()
         try:
-            return await func(session)
+            result = func(session)
+            if hasattr(result, '__await__'):
+                result = await result
+            return result
         finally:
             await session.close()
 
@@ -167,7 +170,9 @@ class MySQLSessionFactory:
         """
         session = await self.get_async_session()
         try:
-            result = await func(session)
+            result = func(session)
+            if hasattr(result, '__await__'):
+                result = await result
             await session.commit()
             return result
         except Exception as e:
