@@ -89,7 +89,7 @@ def _llm_routing(user_input: str) -> RouteDecision:
     Returns:
         RouteDecision 路由决策
     """
-    from llm.providers import get_llm_provider
+    from llms.providers import get_llm_provider
 
     # 获取可用的 LLM 提供者
     provider_name = settings.get_available_provider()

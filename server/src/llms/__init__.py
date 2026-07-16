@@ -8,7 +8,7 @@ LLM 提供者模块
 - 阿里云百炼 (Alibaba Cloud)
 """
 
-from llm.providers import (
+from llms.providers import (
     BaseLLMProvider,
     DeepSeekProvider,
     DoubaoProvider,
@@ -16,7 +16,7 @@ from llm.providers import (
     get_llm_provider,
     create_chat_model,
 )
-from llm.prompts import PromptTemplateManager
+from llms.prompts import PromptTemplateManager
 
 __all__ = [
     "BaseLLMProvider",

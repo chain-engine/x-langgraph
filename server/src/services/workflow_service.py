@@ -7,9 +7,9 @@
 
 from typing import Any, AsyncGenerator, Optional
 
-from repositories.workflow_definition_repository import WorkflowDefinitionRepository
 from workflows.compiler import compile_workflow
 from core.logger import logger
+from repositories.workflow_definition_repository import WorkflowDefinitionRepository
 
 
 class WorkflowDefinitionService:

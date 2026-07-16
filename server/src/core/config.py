@@ -345,6 +345,8 @@ class Settings:
         if (value := os.environ.get('RATE_LIMIT_ENABLED')):
             config['rate_limit']['enabled'] = _to_bool(value)
 
+        if (value := os.environ.get('DB_ENABLED')):
+            config['database']['enabled'] = _to_bool(value)
         if (value := os.environ.get('DB_HOST')):
             config['database']['host'] = value
         if (value := os.environ.get('DB_PORT')):

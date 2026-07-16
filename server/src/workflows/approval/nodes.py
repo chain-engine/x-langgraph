@@ -20,8 +20,8 @@ from workflows.approval.state import (
     ApprovalLevel,
     ApprovalStatus,
 )
-from llm.providers import get_llm_provider
-from llm.prompts import prompt_manager
+from llms.providers import get_llm_provider
+from llms.prompts import prompt_manager
 from core.logger import logger
 
 

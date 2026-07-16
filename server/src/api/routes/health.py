@@ -54,7 +54,7 @@ async def health_ready() -> HealthReadyResponse:
         checks.append({"name": "mysql", "status": "degraded", "error": f"连接失败，使用 MemorySaver 降级: {e}"})
 
     try:
-        from llm.providers import get_llm_provider
+        from llms.providers import get_llm_provider
 
         provider = get_llm_provider(settings.get_available_provider())
         checks.append({"name": "llm_provider", "status": "ok", "provider": provider.name})
