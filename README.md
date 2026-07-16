@@ -387,6 +387,9 @@ SEARCH_API_URL=https://api.search.com/v1/search
 #### 方式一：Docker 一键启动（推荐）
 
 ```bash
+# 进入后端目录
+cd server
+
 # 一键启动（MySQL + API 服务）
 docker-compose up -d
 
@@ -394,7 +397,7 @@ docker-compose up -d
 docker-compose logs -f api
 
 # 测试服务
-curl http://localhost:8000/health
+curl http://localhost:8000/health/live
 ```
 
 服务启动后：
@@ -405,7 +408,10 @@ curl http://localhost:8000/health
 #### 方式二：本地开发
 
 ```bash
-# 1. 启动 MySQL（使用 Docker）
+# 1. 进入后端目录
+cd server
+
+# 2. 启动 MySQL（使用 Docker）
 docker run -d \
   --name x-langgraph-mysql \
   -e MYSQL_ROOT_PASSWORD=123456 \
@@ -413,10 +419,10 @@ docker run -d \
   -p 3306:3306 \
   mysql:8.0
 
-# 2. 启动 API 服务（推荐方式）
-uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+# 3. 启动 API 服务（推荐方式）
+uv run python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
-# 3. 运行示例
+# 4. 运行示例
 uv run python -m examples.hello_world
 ```
 

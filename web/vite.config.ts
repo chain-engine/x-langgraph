@@ -18,10 +18,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/workflows': 'http://localhost:8000',
-      '/chat': 'http://localhost:8000',
-      '/approval': 'http://localhost:8000',
-      '/health': 'http://localhost:8000',
+      '/workflows': 'http://localhost:8009',
+      '/chat': 'http://localhost:8009',
+      '/approval': 'http://localhost:8009',
+      '/health': 'http://localhost:8009',
     },
   },
 })

@@ -72,15 +72,15 @@ const tabs = [
 </script>
 
 <template>
-  <div class="flex h-screen flex-col bg-base-900">
+  <div class="flex h-screen flex-col bg-zinc-50">
     <!-- 顶部栏 -->
-    <header class="flex items-center justify-between border-b border-base-500 bg-base-800 px-4 py-2.5">
+    <header class="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-2.5">
       <div class="flex items-center gap-3">
-        <button @click="goBack" class="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-base-600 transition">
+        <button @click="goBack" class="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition">
           <ArrowLeft :size="18" />
         </button>
         <div>
-          <h1 class="text-sm font-bold text-zinc-100">{{ store.current?.name || workflowName }}</h1>
+          <h1 class="text-sm font-bold text-zinc-900">{{ store.current?.name || workflowName }}</h1>
           <p class="text-xs text-zinc-500">{{ store.current?.description || '' }}</p>
         </div>
       </div>
@@ -98,16 +98,16 @@ const tabs = [
     <!-- 主体三栏 -->
     <div class="flex flex-1 overflow-hidden">
       <!-- 左侧：工作流信息 -->
-      <aside class="w-60 shrink-0 border-r border-base-500 bg-base-800 overflow-y-auto">
+      <aside class="w-60 shrink-0 border-r border-zinc-200 bg-white overflow-y-auto">
         <div class="p-4">
-          <h3 class="flex items-center gap-1.5 text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wide">
+          <h3 class="flex items-center gap-1.5 text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wide">
             <Database :size="13" /> State Schema
           </h3>
           <div v-if="store.current?.state_schema" class="space-y-1">
             <div
               v-for="(type, field) in store.current.state_schema"
               :key="field"
-              class="flex items-center justify-between rounded bg-base-900 px-2 py-1"
+              class="flex items-center justify-between rounded bg-zinc-50 px-2 py-1 border border-zinc-100"
             >
               <span class="text-xs font-mono text-accent-cyan">{{ field }}</span>
               <span class="text-xs font-mono text-zinc-500">{{ type }}</span>
@@ -115,14 +115,14 @@ const tabs = [
           </div>
         </div>
 
-        <div class="border-t border-base-500 p-4">
-          <h3 class="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wide">节点列表</h3>
+        <div class="border-t border-zinc-200 p-4">
+          <h3 class="text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wide">节点列表</h3>
           <div v-if="store.current?.graph_data.nodes" class="space-y-1">
             <div
               v-for="node in store.current.graph_data.nodes"
               :key="node.id"
-              class="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-base-700 cursor-pointer transition"
-              :class="{ 'bg-base-700': selectedNode?.id === node.id }"
+              class="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-zinc-100 cursor-pointer transition"
+              :class="{ 'bg-zinc-100': selectedNode?.id === node.id }"
               @click="handleSelectNode(node)"
             >
               <span
@@ -134,8 +134,8 @@ const tabs = [
                   'bg-accent-red': node.type === 'unknown',
                 }"
               />
-              <span class="text-xs text-zinc-300">{{ node.label }}</span>
-              <span class="text-[10px] text-zinc-600 ml-auto font-mono">{{ node.handler }}</span>
+              <span class="text-xs text-zinc-700">{{ node.label }}</span>
+              <span class="text-[10px] text-zinc-400 ml-auto font-mono">{{ node.handler }}</span>
             </div>
           </div>
         </div>
@@ -152,15 +152,15 @@ const tabs = [
       </main>
 
       <!-- 右侧：面板 -->
-      <aside class="w-80 shrink-0 border-l border-base-500 bg-base-800 flex flex-col">
+      <aside class="w-80 shrink-0 border-l border-zinc-200 bg-white flex flex-col">
         <!-- Tab 切换 -->
-        <div class="flex border-b border-base-500">
+        <div class="flex border-b border-zinc-200">
           <button
             v-for="tab in tabs"
             :key="tab.key"
             @click="activeTab = tab.key"
             class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs transition"
-            :class="activeTab === tab.key ? 'text-accent-cyan border-b-2 border-accent-cyan bg-base-700/50' : 'text-zinc-500 hover:text-zinc-300'"
+            :class="activeTab === tab.key ? 'text-accent-cyan border-b-2 border-accent-cyan bg-zinc-50' : 'text-zinc-500 hover:text-zinc-700'"
           >
             <component :is="tab.icon" :size="13" /> {{ tab.label }}
           </button>

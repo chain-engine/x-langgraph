@@ -35,19 +35,19 @@ function saveApiKey() {
 </script>
 
 <template>
-  <div class="border-t border-base-500 bg-base-800 px-4 py-3">
+  <div class="border-t border-zinc-200 bg-white px-4 py-3">
     <div class="flex items-center gap-3">
       <input
         v-model="message"
         placeholder="输入测试消息，如：武汉今天天气怎么样？"
-        class="flex-1 rounded-lg bg-base-900 border border-base-500 px-4 py-2 text-sm text-zinc-100 focus:border-accent-cyan outline-none placeholder:text-zinc-600"
+        class="flex-1 rounded-lg bg-white border border-zinc-300 px-4 py-2 text-sm text-zinc-900 focus:border-accent-cyan outline-none placeholder:text-zinc-400"
         @keyup.enter="runStream"
       />
 
       <input
         v-model="sessionId"
         placeholder="session_id"
-        class="w-40 rounded-lg bg-base-900 border border-base-500 px-3 py-2 text-xs text-zinc-300 font-mono focus:border-accent-cyan outline-none"
+        class="w-40 rounded-lg bg-white border border-zinc-300 px-3 py-2 text-xs text-zinc-700 font-mono focus:border-accent-cyan outline-none"
       />
 
       <template v-if="!execution.isRunning">
@@ -59,7 +59,7 @@ function saveApiKey() {
         </button>
         <button
           @click="runSync"
-          class="flex items-center gap-1.5 rounded-lg bg-base-600 border border-base-400 px-4 py-2 text-sm text-zinc-300 hover:bg-base-500 transition"
+          class="flex items-center gap-1.5 rounded-lg bg-zinc-100 border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-200 transition"
         >
           <Play :size="15" /> 同步执行
         </button>
@@ -75,7 +75,7 @@ function saveApiKey() {
 
       <button
         @click="showApiKey = !showApiKey"
-        class="rounded-lg border border-base-400 px-3 py-2 text-zinc-400 hover:text-zinc-200 transition"
+        class="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-500 hover:text-zinc-900 transition"
         title="API Key"
       >
         <KeyRound :size="15" />
@@ -88,7 +88,7 @@ function saveApiKey() {
         v-model="apiKey"
         type="password"
         placeholder="X-API-Key (可选)"
-        class="flex-1 rounded bg-base-900 border border-base-500 px-3 py-1.5 text-xs text-zinc-100 font-mono outline-none focus:border-accent-cyan"
+        class="flex-1 rounded bg-white border border-zinc-300 px-3 py-1.5 text-xs text-zinc-900 font-mono outline-none focus:border-accent-cyan"
       />
       <button @click="saveApiKey" class="rounded bg-accent-cyan/20 border border-accent-cyan/40 px-3 py-1.5 text-xs text-accent-cyan hover:bg-accent-cyan/30">保存</button>
     </div>

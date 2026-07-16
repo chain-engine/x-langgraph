@@ -14,13 +14,13 @@
 
 body {
   margin: 0;
-  background: #0a0a0f;
-  color: #e4e4e7;
+  background: #f8fafc;
+  color: #1e293b;
 }
 
-/* Vue Flow 深色主题覆盖 */
+/* Vue Flow 浅色主题覆盖 */
 .vue-flow__background {
-  background: #0a0a0f;
+  background: #f8fafc;
 }
 
 .vue-flow__node {
@@ -28,7 +28,7 @@ body {
 }
 
 .vue-flow__edge-path {
-  stroke: #3a3a4a;
+  stroke: #cbd5e1;
   stroke-width: 2;
 }
 
@@ -38,25 +38,25 @@ body {
 }
 
 .vue-flow__controls {
-  background: #13131a;
-  border: 1px solid #2a2a38;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .vue-flow__controls-button {
   background: transparent;
-  border-bottom: 1px solid #2a2a38;
-  fill: #e4e4e7;
+  border-bottom: 1px solid #e2e8f0;
+  fill: #64748b;
 }
 
 .vue-flow__controls-button:hover {
-  background: #1a1a24;
+  background: #f1f5f9;
 }
 
 .vue-flow__minimap {
-  background: #13131a;
-  border: 1px solid #2a2a38;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
 }
 
@@ -67,14 +67,14 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f0f17;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a2a38;
+  background: #cbd5e1;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a4a;
+  background: #94a3b8;
 }

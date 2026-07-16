@@ -310,6 +310,9 @@ SEARCH_API_URL=https://api.search.com/v1/search
 #### Option 1: Docker One-Click Start (Recommended)
 
 ```bash
+# Enter backend directory
+cd server
+
 # One-click start (MySQL + API service)
 docker-compose up -d
 
@@ -317,7 +320,7 @@ docker-compose up -d
 docker-compose logs -f api
 
 # Test service
-curl http://localhost:8000/health
+curl http://localhost:8000/health/live
 ```
 
 After service starts:
@@ -327,7 +330,10 @@ After service starts:
 #### Option 2: Local Development
 
 ```bash
-# 1. Start MySQL (using Docker)
+# 1. Enter backend directory
+cd server
+
+# 2. Start MySQL (using Docker)
 docker run -d \
   --name x-langgraph-mysql \
   -e MYSQL_ROOT_PASSWORD=123456 \
@@ -335,10 +341,10 @@ docker run -d \
   -p 3306:3306 \
   mysql:8.0
 
-# 2. Start API service (recommended)
-uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+# 3. Start API service (recommended)
+uv run python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 
-# 3. Run examples
+# 4. Run examples
 uv run python -m examples.hello_world
 ```
 
