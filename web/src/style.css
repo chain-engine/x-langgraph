@@ -3,15 +3,78 @@
 @tailwind utilities;
 
 :root {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica,
-    Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  font-family: 'JetBrains Mono', Consolas, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+body {
+  margin: 0;
+  background: #0a0a0f;
+  color: #e4e4e7;
+}
+
+/* Vue Flow 深色主题覆盖 */
+.vue-flow__background {
+  background: #0a0a0f;
+}
+
+.vue-flow__node {
+  font-family: inherit;
+}
+
+.vue-flow__edge-path {
+  stroke: #3a3a4a;
+  stroke-width: 2;
+}
+
+.vue-flow__edge.selected .vue-flow__edge-path,
+.vue-flow__edge:hover .vue-flow__edge-path {
+  stroke: #00d4ff;
+}
+
+.vue-flow__controls {
+  background: #13131a;
+  border: 1px solid #2a2a38;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.vue-flow__controls-button {
+  background: transparent;
+  border-bottom: 1px solid #2a2a38;
+  fill: #e4e4e7;
+}
+
+.vue-flow__controls-button:hover {
+  background: #1a1a24;
+}
+
+.vue-flow__minimap {
+  background: #13131a;
+  border: 1px solid #2a2a38;
+  border-radius: 6px;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f0f17;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a38;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a4a;
+}

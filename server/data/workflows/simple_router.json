@@ -1,0 +1,159 @@
+{
+  "name": "simple_router",
+  "description": "简单路由工作流：根据输入自动路由到搜索、计算或天气节点",
+  "state_schema": {
+    "input": "str",
+    "route": "str",
+    "output": "str",
+    "error": "Optional[str]",
+    "routing_reasoning": "Optional[str]",
+    "routing_confidence": "Optional[float]"
+  },
+  "graph_data": {
+    "nodes": [
+      {
+        "id": "router",
+        "type": "router",
+        "label": "路由节点",
+        "position": {
+          "x": 400.0,
+          "y": 50.0
+        },
+        "handler": "router",
+        "config": {
+          "routing_mode": "llm_or_rule",
+          "description": "分析输入，决定路由到哪个处理节点"
+        }
+      },
+      {
+        "id": "search",
+        "type": "tool",
+        "label": "搜索",
+        "position": {
+          "x": 100.0,
+          "y": 250.0
+        },
+        "handler": "search",
+        "config": {
+          "description": "搜索信息、查找资料"
+        }
+      },
+      {
+        "id": "calculate",
+        "type": "tool",
+        "label": "计算",
+        "position": {
+          "x": 300.0,
+          "y": 250.0
+        },
+        "handler": "calculate",
+        "config": {
+          "description": "数学计算、算术运算"
+        }
+      },
+      {
+        "id": "weather",
+        "type": "tool",
+        "label": "天气",
+        "position": {
+          "x": 500.0,
+          "y": 250.0
+        },
+        "handler": "weather",
+        "config": {
+          "description": "天气查询、气温预报"
+        }
+      },
+      {
+        "id": "unknown",
+        "type": "unknown",
+        "label": "未知请求",
+        "position": {
+          "x": 700.0,
+          "y": 250.0
+        },
+        "handler": "unknown",
+        "config": {
+          "description": "无法识别的请求"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-router-search",
+        "source": "router",
+        "target": "search",
+        "type": "conditional",
+        "condition": {
+          "field": "route",
+          "operator": "==",
+          "value": "search"
+        }
+      },
+      {
+        "id": "e-router-calculate",
+        "source": "router",
+        "target": "calculate",
+        "type": "conditional",
+        "condition": {
+          "field": "route",
+          "operator": "==",
+          "value": "calculate"
+        }
+      },
+      {
+        "id": "e-router-weather",
+        "source": "router",
+        "target": "weather",
+        "type": "conditional",
+        "condition": {
+          "field": "route",
+          "operator": "==",
+          "value": "weather"
+        }
+      },
+      {
+        "id": "e-router-unknown",
+        "source": "router",
+        "target": "unknown",
+        "type": "conditional",
+        "condition": {
+          "field": "route",
+          "operator": "==",
+          "value": "unknown"
+        }
+      },
+      {
+        "id": "e-search-end",
+        "source": "search",
+        "target": "__end__",
+        "type": "normal",
+        "condition": null
+      },
+      {
+        "id": "e-calculate-end",
+        "source": "calculate",
+        "target": "__end__",
+        "type": "normal",
+        "condition": null
+      },
+      {
+        "id": "e-weather-end",
+        "source": "weather",
+        "target": "__end__",
+        "type": "normal",
+        "condition": null
+      },
+      {
+        "id": "e-unknown-end",
+        "source": "unknown",
+        "target": "__end__",
+        "type": "normal",
+        "condition": null
+      }
+    ],
+    "entry_point": "router"
+  },
+  "created_at": "2026-07-16T02:08:49.637000",
+  "updated_at": "2026-07-16T09:36:15.435517"
+}

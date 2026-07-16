@@ -11,6 +11,8 @@
 - Automated approval workflows (risk assessment, human-machine interaction)
 - Complex business process orchestration (conditional routing, state management)
 
+**Visual Interface**: Provides a Vue 3-based workflow visualization editor with drag-and-drop node editing, conditional routing configuration, and real-time state monitoring.
+
 ## What is LangGraph
 
 `LangGraph` is a framework in the LangChain ecosystem specifically designed for workflow orchestration. It provides a declarative way to define and execute complex workflows based on language models.
@@ -96,115 +98,53 @@ def router_node(state):
 - **API Security**: API Key authentication + rate limiting (60 requests/minute/IP)
 - **Observability**: Request ID middleware, structured logging, health checks, Prometheus metrics
 - **Docker Deployment**: Complete containerized deployment solution
+- **Visual Editor**: Vue 3 + Vue Flow based workflow visualization editor with drag-and-drop, conditional routing configuration, and real-time state monitoring
 
 ## Project Structure
 
 ```
 x-langgraph/
-├── src/                              # Business code (source directory)
-│   ├── api/                          # API Layer
-│   │   ├── routes/                   # Route modules
-│   │   │   ├── __init__.py
-│   │   │   ├── chat.py               # Chat endpoint (/chat)
-│   │   │   ├── approval.py           # Approval endpoint (/approval)
-│   │   │   ├── health.py             # Health check endpoint
-│   │   │   └── metrics.py            # Prometheus metrics endpoint
-│   │   ├── __init__.py
-│   │   └── router.py                 # Route registration management
-│   │
-│   ├── core/                         # Core Support Layer
-│   │   ├── __init__.py
-│   │   ├── config.py                 # Global config center (YAML + env vars)
-│   │   ├── logger.py                 # Logging configuration (loguru)
-│   │   ├── exceptions.py             # Global exception definitions
-│   │   ├── middleware.py             # Middleware (request ID, error handling, CORS)
-│   │   └── container.py              # IOC dependency injection container
-│   │
-│   ├── services/                     # Business Logic Layer
-│   │   ├── __init__.py
-│   │   ├── base.py                   # Service base class
-│   │   ├── chat_service.py           # Chat business logic
-│   │   └── approval_service.py       # Approval business logic
-│   │
-│   ├── repositories/                 # Data Access Layer
-│   │   ├── __init__.py
-│   │   ├── base.py                   # Repository base class
-│   │   └── workflow_repository.py    # Workflow state access
-│   │
-│   ├── models/                       # ORM Entity Layer
-│   │   ├── __init__.py
-│   │   ├── base.py                   # SQLAlchemy Base
-│   │   └── workflow.py               # Workflow entity model
-│   │
-│   ├── infras/                       # Infrastructure Layer
-│   │   ├── __init__.py
-│   │   ├── mysql.py                  # MySQL session factory
-│   │   ├── redis.py                  # Redis client wrapper
-│   │   └── http_client.py            # General HTTP client
-│   │
-│   ├── schemas/                      # Data Model Layer
-│   │   ├── __init__.py
-│   │   ├── chat.py                   # Chat endpoint schemas
-│   │   ├── approval.py               # Approval endpoint schemas
-│   │   └── health.py                 # Health check schemas
-│   │
-│   ├── constants/                    # Global Constants
-│   │   ├── __init__.py
-│   │   ├── develop.py                # Development constants
-│   │   ├── streaming_modes.py        # Streaming mode constants
-│   │   └── enums.py                  # Enum definitions (Environment, etc.)
-│   │
-│   ├── utils/                        # Utility Functions
-│   │   └── __init__.py
-│   │
-│   ├── llm/                          # LLM Provider Module
-│   │   ├── __init__.py
-│   │   ├── providers.py              # LLM providers (DeepSeek/Doubao/Aliyun)
-│   │   └── prompts.py                # Prompt template management
-│   │
-│   ├── tools/                        # Tool Module
-│   │   ├── weather/                  # Weather tools (multi-provider)
-│   │   ├── __init__.py
-│   │   ├── base.py                   # Tool base class
-│   │   ├── search_tools.py           # Search tools
-│   │   ├── calculation_tools.py      # Calculation tools
-│   │   ├── weather_tools.py          # Weather tools
-│   │   ├── data_tools.py             # Data processing tools
-│   │   └── database_tools.py         # Database tools (Text2SQL)
-│   │
-│   ├── workflows/                    # Workflow Module
-│   │   ├── base.py                   # Workflow base class (BaseWorkflow)
-│   │   ├── checkpointer.py           # LangGraph Checkpointer (state persistence)
-│   │   ├── simple_router/            # Simple router workflow
-│   │   ├── customer_service/         # Customer service workflow
-│   │   ├── rag_qa/                   # RAG document Q&A workflow
-│   │   ├── multi_agent/              # Multi-agent collaboration workflow
-│   │   └── approval/                 # Automated approval workflow
-│   │
-│   ├── __init__.py
-│   └── main.py                       # FastAPI application entry
+├── server/                           # Backend API Service
+│   ├── src/                          # Python source directory
+│   │   ├── api/                      # API Layer
+│   │   │   ├── routes/               # Route modules (chat.py, approval.py, workflows.py)
+│   │   │   └── router.py             # Route registration management
+│   │   ├── core/                     # Core Support Layer (config, logger, container, middleware)
+│   │   ├── services/                 # Business Logic Layer (chat_service, approval_service, workflow_service)
+│   │   ├── repositories/             # Data Access Layer (workflow_repository, workflow_definition_repository)
+│   │   ├── models/                   # ORM Entity Layer
+│   │   ├── infras/                   # Infrastructure Layer (mysql, redis, http_client)
+│   │   ├── schemas/                  # Data Model Layer (Pydantic Schema)
+│   │   ├── llm/                      # LLM Provider Module
+│   │   ├── tools/                    # Tool Module (weather, search, calculation)
+│   │   ├── workflows/                # Workflow Module (simple_router, approval, compiler)
+│   │   └── main.py                   # FastAPI application entry
+│   ├── examples/                     # Example code
+│   ├── tests/                        # Test code
+│   ├── data/                         # Workflow definition files (JSON)
+│   ├── Dockerfile                    # Docker image config
+│   ├── docker-compose.yml            # Docker compose config
+│   ├── pyproject.toml                # Python project config
+│   └── .env.example                  # Environment variable template
 │
-├── docker/                           # Docker configuration
-│   └── mysql/
-│       └── init.sql                  # MySQL initialization script
+├── web/                              # Frontend Visual Interface (Vue 3)
+│   ├── src/
+│   │   ├── components/               # Components
+│   │   │   ├── graph/                # Graph components (WorkflowCanvas, WorkflowNode, WorkflowEdge)
+│   │   │   └── panels/               # Panel components (PropertyPanel, StateInspector, ExecutionLog)
+│   │   ├── stores/                   # Pinia state management (workflow, execution)
+│   │   ├── api/                      # API clients (http, workflows, sse)
+│   │   ├── types/                    # TypeScript type definitions
+│   │   ├── views/                    # Page views (WorkflowList, WorkflowEditor)
+│   │   └── router/                   # Vue Router
+│   ├── package.json                  # Node.js dependency config
+│   ├── vite.config.ts                # Vite build config
+│   └── tailwind.config.js            # Tailwind CSS config
 │
-├── examples/                         # Example code
-│   ├── hello_world.py                # Basic example
-│   ├── agent_workflow.py             # Basic workflow example
-│   ├── demo_workflows.py             # Advanced workflow examples
-│   └── langgraph_platform.py         # LangGraph Platform deployment example
-│
-├── tests/                            # Test code
-├── scripts/                          # Operations scripts
-├── logs/                             # Runtime logs
-├── .env                              # Environment variable config (private)
-├── .env.example                      # Environment variable template (public)
-├── config.yaml                       # YAML configuration file (optional)
-├── Dockerfile                        # Docker image config
-├── docker-compose.yml                # Docker compose config
-├── langgraph.json                    # LangGraph Platform config
-├── pyproject.toml                    # Project config
-└── README.md / README.en.md          # Project documentation
+├── .trae/                            # Trae AI tool config
+├── LICENSE                           # License
+├── README.md                         # Chinese documentation
+└── README.en.md                      # English documentation
 ```
 
 ## System Architecture
@@ -402,27 +342,52 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 uv run python -m examples.hello_world
 ```
 
+### Start Frontend Visual Interface
+
+```bash
+# Enter frontend directory
+cd web
+
+# Install dependencies (first time)
+npm install
+
+# Start development server
+npm run dev
+```
+
+After frontend starts:
+- Visual Interface: http://localhost:5173
+- Workflow Editor: http://localhost:5173/editor/simple_router
+
 ### Common Commands
 
 ```bash
-# Docker related
-docker-compose up -d          # Start service
-docker-compose down           # Stop service
-docker-compose logs -f api    # View logs
-docker-compose restart api    # Restart API
-
-# Local development
+# Backend commands (in server/ directory)
 uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload  # Start API (recommended)
 uv run python -m examples.hello_world                            # Run example
 uv run pytest tests/ -v                                           # Run tests
 
-# Code quality
-uv run black src/ tests/               # Code formatting
-uv run ruff check src/ tests/          # Code linting
-uv run mypy src/                       # Type checking
+# Frontend commands (in web/ directory)
+npm run dev                          # Start development server
+npm run build                        # Build production version
+npm run check                        # TypeScript type checking
+npm run lint                         # Code linting
+
+# Docker commands (in server/ directory)
+docker-compose up -d                 # Start service
+docker-compose down                  # Stop service
+docker-compose logs -f api           # View logs
+docker-compose restart api           # Restart API
+
+# Code quality (backend)
+uv run black src/ tests/             # Code formatting
+uv run ruff check src/ tests/        # Code linting
+uv run mypy src/                     # Type checking
 ```
 
 ## Tech Stack
+
+### Backend Tech Stack
 
 | Category | Technology | Description |
 |----------|------------|-------------|
@@ -438,6 +403,19 @@ uv run mypy src/                       # Type checking
 | **Deployment** | Docker | Containerized deployment |
 | | Docker Compose | Multi-container orchestration |
 | **Package Manager** | uv | Fast Python package manager |
+
+### Frontend Tech Stack
+
+| Category | Technology | Description |
+|----------|------------|-------------|
+| **Frontend Framework** | Vue 3 | Progressive JavaScript framework |
+| **Build Tool** | Vite | Fast development build tool |
+| **State Management** | Pinia | Vue official state management |
+| **Routing** | Vue Router | Vue routing management |
+| **Graph Visualization** | Vue Flow | Vue-based node graph visualization library |
+| **UI Framework** | Tailwind CSS | Atomic CSS framework |
+| **Icons** | Lucide Vue | Beautiful icon library |
+| **Language** | TypeScript | Type-safe JavaScript |
 
 ## API Documentation
 
@@ -462,6 +440,13 @@ After service starts, access API documentation at:
 | `/chat/stream` | POST | Streaming chat (SSE) |
 | `/approval/resume` | POST | Resume approval workflow |
 | `/approval/status/{session_id}` | GET | Get approval status |
+| `/workflows` | GET | Get workflow list |
+| `/workflows/{name}` | GET | Get workflow definition |
+| `/workflows/{name}` | POST | Create workflow |
+| `/workflows/{name}` | PUT | Update workflow |
+| `/workflows/{name}` | DELETE | Delete workflow |
+| `/workflows/{name}/execute` | POST | Execute workflow (sync) |
+| `/workflows/{name}/stream` | POST | Execute workflow (streaming SSE) |
 
 ### API Authentication
 
@@ -593,6 +578,84 @@ Settings
 ├── doubao          (DoubaoConfig)       - Doubao configuration
 ├── aliyun          (AliyunConfig)       - Alibaba Cloud configuration
 └── third_party     (ThirdPartyConfig)   - Third-party API configuration
+```
+
+## Visual Interface
+
+### Overview
+
+The workflow visualization editor provides graphical workflow design and management capabilities, helping developers intuitively understand and operate LangGraph workflows.
+
+**Core Features**:
+- **Workflow List Management**: View, search, create, and delete workflow definitions
+- **Visual Canvas**: Vue Flow-based node graph editor with drag-and-drop, zoom, and pan support
+- **Node Editing**: Add, edit, and delete nodes; configure node properties (type, Handler, position, config)
+- **Edge Management**: Create, edit, and delete edges; supports normal edges and conditional edges (conditional routing)
+- **Real-time State Monitoring**: Real-time display of node status and edge flow during workflow execution
+- **Execution Logs**: View complete execution log records
+
+### Interface Layout
+
+The visualization editor adopts a three-panel layout:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Top Toolbar                                 │
+│  ← Back  │  Workflow Name  │  Save Button                           │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌───────────────────────────┐  ┌─────────────┐  │
+│  │   Left      │  │         Middle Canvas      │  │   Right     │  │
+│  │   Panel     │  │                           │  │   Panel     │  │
+│  │             │  │   [START]  →  [router]    │  │             │  │
+│  │ • State     │  │             ↓    ↓    ↓    │  │ • Property  │  │
+│  │   Schema    │  │        [search] [calc]    │  │ • State     │  │
+│  │             │  │             ↓    ↓        │  │ • Execution │  │
+│  │ • Node List │  │         [END]             │  │   Logs      │  │
+│  │             │  │                           │  │             │  │
+│  └─────────────┘  └───────────────────────────┘  └─────────────┘  │
+├─────────────────────────────────────────────────────────────────────┤
+│                         Bottom Execution Bar                        │
+│  Input Message │ Session ID │ Execute │ Stream Execute │ Stop       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Node Types
+
+| Type | Color | Icon | Description |
+|------|-------|------|-------------|
+| **router** | Purple | 🔀 | Routing node, routes to different branches based on conditions |
+| **processor** | Cyan | ⚙️ | Processing node, executes business logic |
+| **tool** | Green | 🛠️ | Tool node, calls external tools (search, calculation, weather) |
+| **unknown** | Red | ❓ | Unknown node, handles unrecognized requests |
+| **end** | Gray | ⏹️ | End node, workflow termination point |
+
+### Edge Types
+
+| Type | Style | Description |
+|------|-------|-------------|
+| **normal** | Solid line | Normal edge, direct flow |
+| **conditional** | Dashed line | Conditional edge, routes based on state field values |
+
+### Access
+
+1. Start the backend API service (port 8000)
+2. Start the frontend development server (port 5173)
+3. Open browser: http://localhost:5173
+
+### Usage Flow
+
+```
+1. Enter workflow list page → View all workflows
+   ↓
+2. Click workflow card → Enter editor
+   ↓
+3. View nodes and edges on canvas
+   ↓
+4. Click node/edge → Edit properties in right panel
+   ↓
+5. Input message at bottom → Click execute to run workflow
+   ↓
+6. View real-time status updates and execution logs
 ```
 
 ## License

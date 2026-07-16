@@ -1,13 +1,16 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import '@vue-flow/controls/dist/style.css'
+import '@vue-flow/minimap/dist/style.css'
 import './style.css'
 import App from './App.vue'
 import router from './router'
 
-// 创建Vue应用实例
 const app = createApp(App)
 
-// 使用路由
+app.use(createPinia())
 app.use(router)
 
-// 挂载应用
 app.mount('#app')

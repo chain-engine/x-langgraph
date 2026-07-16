@@ -1,0 +1,152 @@
+# -*- coding: utf-8 -*-
+"""
+图编译器
+
+将 JSON 工作流定义编译为 LangGraph StateGraph。
+"""
+
+from typing import Any, Callable
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
+
+from core.logger import logger
+
+
+# Handler 映射表：handler 标识 → Python 处理函数
+HANDLER_REGISTRY: dict[str, Callable] = {}
+
+
+def _register_handlers():
+    """注册内置 handler"""
+    from workflows.simple_router.nodes import (
+        router_node, search_node, calculate_node, weather_node, unknown_node,
+    )
+    from workflows.approval.nodes import (
+        submit_node, evaluate_node, human_approval_node, auto_approve_node, notify_node,
+    )
+
+    HANDLER_REGISTRY.update({
+        "router": router_node,
+        "search": search_node,
+        "calculate": calculate_node,
+        "weather": weather_node,
+        "unknown": unknown_node,
+        "submit": submit_node,
+        "evaluate": evaluate_node,
+        "human_approval": human_approval_node,
+        "auto_approve": auto_approve_node,
+        "notify": notify_node,
+    })
+
+
+def _get_state_class(state_schema: dict[str, str]):
+    """根据 state_schema 动态构建 TypedDict"""
+    from typing import TypedDict, Optional
+    fields = {}
+    for field_name, field_type in state_schema.items():
+        py_type = {
+            "str": str, "string": str,
+            "int": int, "integer": int,
+            "float": float,
+            "bool": bool, "boolean": bool,
+            "list": list, "dict": dict,
+        }.get(field_type, Any)
+        if field_type.startswith("Optional"):
+            py_type = Optional[py_type]
+        fields[field_name] = py_type
+    return TypedDict("DynamicState", fields)  # type: ignore
+
+
+def compile_workflow(definition: dict[str, Any], checkpointer=None):
+    """
+    将 JSON 工作流定义编译为 LangGraph StateGraph
+
+    Args:
+        definition: 工作流定义字典
+        checkpointer: 检查点存储器
+
+    Returns:
+        编译后的 StateGraph
+    """
+    if not HANDLER_REGISTRY:
+        _register_handlers()
+
+    graph_data = definition.get("graph_data", {})
+    nodes = graph_data.get("nodes", [])
+    edges = graph_data.get("edges", [])
+    entry_point = graph_data.get("entry_point", "")
+
+    state_schema = definition.get("state_schema", {})
+    if not state_schema:
+        state_schema = {"input": "str", "output": "str", "error": "Optional[str]"}
+
+    StateClass = _get_state_class(state_schema)
+    workflow = StateGraph(StateClass)
+
+    # 添加节点
+    for node_def in nodes:
+        node_id = node_def["id"]
+        handler_name = node_def.get("handler", node_id)
+        handler = HANDLER_REGISTRY.get(handler_name)
+        if handler is None:
+            logger.warning(f"Handler not found for node '{node_id}': '{handler_name}', using passthrough")
+            handler = _passthrough_handler
+        workflow.add_node(node_id, handler)
+        logger.debug(f"Added node: {node_id} (handler: {handler_name})")
+
+    # 设置入口点
+    if entry_point:
+        workflow.set_entry_point(entry_point)
+    elif nodes:
+        workflow.set_entry_point(nodes[0]["id"])
+
+    # 添加边
+    conditional_map: dict[str, dict[str, str]] = {}
+    for edge in edges:
+        source = edge["source"]
+        target = edge["target"]
+        edge_type = edge.get("type", "normal")
+
+        if edge_type == "conditional":
+            condition = edge.get("condition", {})
+            field_name = condition.get("field", "route")
+            expected_value = condition.get("value", "")
+
+            if source not in conditional_map:
+                conditional_map[source] = {}
+
+            conditional_map[source][expected_value] = target
+        else:
+            if target == "__end__":
+                workflow.add_edge(source, END)
+            else:
+                workflow.add_edge(source, target)
+            logger.debug(f"Added edge: {source} -> {target}")
+
+    # 添加条件边
+    for source, mapping in conditional_map.items():
+        if "__end__" in mapping:
+            mapping["__end__"] = END
+
+        route_fn = _make_route_fn(source, list(conditional_map.keys()))
+        workflow.add_conditional_edges(source, route_fn, mapping)
+        logger.debug(f"Added conditional edges from {source}: {mapping}")
+
+    cp = checkpointer or MemorySaver()
+    compiled = workflow.compile(checkpointer=cp)
+    logger.info(f"Workflow compiled: {definition.get('name', 'unknown')}")
+    return compiled
+
+
+def _passthrough_handler(state: dict) -> dict:
+    """透传 handler（当找不到对应处理函数时使用）"""
+    return {"output": state.get("input", ""), "error": None}
+
+
+def _make_route_fn(field_name: str, _hint=None):
+    """创建条件路由函数"""
+    def route_fn(state: dict) -> str:
+        value = state.get(field_name, state.get("route", "unknown"))
+        logger.info(f"Conditional routing [{field_name}]: {value}")
+        return value
+    return route_fn

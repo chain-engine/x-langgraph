@@ -3,7 +3,6 @@ import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import Inspector from 'unplugin-vue-dev-locator/vite'
 
-// https://vite.dev/config/
 export default defineConfig({
   build: {
     sourcemap: 'hidden',
@@ -14,7 +13,15 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'), // ✅ 定义 @ = src
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  server: {
+    proxy: {
+      '/workflows': 'http://localhost:8000',
+      '/chat': 'http://localhost:8000',
+      '/approval': 'http://localhost:8000',
+      '/health': 'http://localhost:8000',
     },
   },
 })

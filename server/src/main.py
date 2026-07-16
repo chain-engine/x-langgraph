@@ -20,20 +20,31 @@ from core.container import container
 from api.router import api_router
 from services.chat_service import ChatService
 from services.approval_service import ApprovalService
+from services.workflow_service import WorkflowDefinitionService
 from repositories.workflow_repository import WorkflowRepository
+from repositories.workflow_definition_repository import WorkflowDefinitionRepository
 
 
-def register_services():
+async def register_services():
     """
     注册所有服务到 IOC 容器
     """
     logger.info("Registering services to container...")
 
     container.register(WorkflowRepository)
+    container.register(WorkflowDefinitionRepository)
     container.register(ChatService)
     container.register(ApprovalService)
+    container.register(WorkflowDefinitionService)
 
     logger.info("Services registered successfully")
+
+    # 初始化工作流定义种子数据
+    try:
+        wf_service = container.resolve(WorkflowDefinitionService)
+        await wf_service.seed_builtin_workflows()
+    except Exception as e:
+        logger.warning(f"Failed to seed workflow definitions: {e}")
 
 
 @asynccontextmanager
@@ -47,7 +58,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"调试模式: {settings.DEBUG}")
     logger.info("=" * 50)
 
-    register_services()
+    await register_services()
 
     yield
 

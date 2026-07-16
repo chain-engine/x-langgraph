@@ -1,0 +1,202 @@
+# -*- coding: utf-8 -*-
+"""
+工作流种子数据
+
+从内置 Python 工作流提取结构定义，用于初始化可视化编辑器。
+"""
+
+SIMPLE_ROUTER_DEF = {
+    "name": "simple_router",
+    "description": "简单路由工作流：根据输入自动路由到搜索、计算或天气节点",
+    "state_schema": {
+        "input": "str",
+        "route": "str",
+        "output": "str",
+        "error": "Optional[str]",
+        "routing_reasoning": "Optional[str]",
+        "routing_confidence": "Optional[float]",
+    },
+    "graph_data": {
+        "entry_point": "router",
+        "nodes": [
+            {
+                "id": "router",
+                "type": "router",
+                "label": "路由节点",
+                "position": {"x": 400, "y": 50},
+                "handler": "router",
+                "config": {
+                    "routing_mode": "llm_or_rule",
+                    "description": "分析输入，决定路由到哪个处理节点",
+                },
+            },
+            {
+                "id": "search",
+                "type": "tool",
+                "label": "搜索",
+                "position": {"x": 100, "y": 250},
+                "handler": "search",
+                "config": {"description": "搜索信息、查找资料"},
+            },
+            {
+                "id": "calculate",
+                "type": "tool",
+                "label": "计算",
+                "position": {"x": 300, "y": 250},
+                "handler": "calculate",
+                "config": {"description": "数学计算、算术运算"},
+            },
+            {
+                "id": "weather",
+                "type": "tool",
+                "label": "天气",
+                "position": {"x": 500, "y": 250},
+                "handler": "weather",
+                "config": {"description": "天气查询、气温预报"},
+            },
+            {
+                "id": "unknown",
+                "type": "unknown",
+                "label": "未知请求",
+                "position": {"x": 700, "y": 250},
+                "handler": "unknown",
+                "config": {"description": "无法识别的请求"},
+            },
+        ],
+        "edges": [
+            {
+                "id": "e-router-search",
+                "source": "router",
+                "target": "search",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "search"},
+            },
+            {
+                "id": "e-router-calculate",
+                "source": "router",
+                "target": "calculate",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "calculate"},
+            },
+            {
+                "id": "e-router-weather",
+                "source": "router",
+                "target": "weather",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "weather"},
+            },
+            {
+                "id": "e-router-unknown",
+                "source": "router",
+                "target": "unknown",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "unknown"},
+            },
+            {"id": "e-search-end", "source": "search", "target": "__end__", "type": "normal"},
+            {"id": "e-calculate-end", "source": "calculate", "target": "__end__", "type": "normal"},
+            {"id": "e-weather-end", "source": "weather", "target": "__end__", "type": "normal"},
+            {"id": "e-unknown-end", "source": "unknown", "target": "__end__", "type": "normal"},
+        ],
+    },
+}
+
+APPROVAL_DEF = {
+    "name": "approval",
+    "description": "自动化审批工作流：支持自动审批和人工审批（Human-in-the-Loop）",
+    "state_schema": {
+        "messages": "list",
+        "request": "dict",
+        "approval_level": "str",
+        "approval_status": "str",
+        "auto_evaluation": "dict",
+        "risk_level": "str",
+        "recommended_action": "str",
+        "approval_history": "list",
+        "requires_human": "bool",
+        "human_approved": "Optional[bool]",
+        "human_comments": "Optional[str]",
+        "approver_id": "Optional[str]",
+        "final_status": "str",
+        "final_decision": "str",
+        "notification_sent": "bool",
+        "error": "Optional[str]",
+    },
+    "graph_data": {
+        "entry_point": "submit",
+        "nodes": [
+            {
+                "id": "submit",
+                "type": "processor",
+                "label": "提交申请",
+                "position": {"x": 400, "y": 50},
+                "handler": "submit",
+                "config": {"description": "验证请求并生成请求 ID"},
+            },
+            {
+                "id": "evaluate",
+                "type": "processor",
+                "label": "自动评估",
+                "position": {"x": 400, "y": 200},
+                "handler": "evaluate",
+                "config": {"description": "基于规则评估风险等级和推荐动作"},
+            },
+            {
+                "id": "auto_approve",
+                "type": "processor",
+                "label": "自动审批",
+                "position": {"x": 200, "y": 350},
+                "handler": "auto_approve",
+                "config": {"description": "低风险请求自动通过"},
+            },
+            {
+                "id": "human_approval",
+                "type": "router",
+                "label": "人工审批",
+                "position": {"x": 600, "y": 350},
+                "handler": "human_approval",
+                "config": {"description": "中高风险请求等待人工审批（Human-in-the-Loop）"},
+            },
+            {
+                "id": "notify",
+                "type": "processor",
+                "label": "发送通知",
+                "position": {"x": 400, "y": 500},
+                "handler": "notify",
+                "config": {"description": "发送审批结果通知"},
+            },
+        ],
+        "edges": [
+            {"id": "e-submit-evaluate", "source": "submit", "target": "evaluate", "type": "normal"},
+            {
+                "id": "e-evaluate-auto",
+                "source": "evaluate",
+                "target": "auto_approve",
+                "type": "conditional",
+                "condition": {"field": "recommended_action", "operator": "==", "value": "auto_approve"},
+            },
+            {
+                "id": "e-evaluate-human",
+                "source": "evaluate",
+                "target": "human_approval",
+                "type": "conditional",
+                "condition": {"field": "recommended_action", "operator": "!=", "value": "auto_approve"},
+            },
+            {"id": "e-auto-notify", "source": "auto_approve", "target": "notify", "type": "normal"},
+            {
+                "id": "e-human-notify",
+                "source": "human_approval",
+                "target": "notify",
+                "type": "conditional",
+                "condition": {"field": "final_status", "operator": "in", "value": "approved,rejected"},
+            },
+            {
+                "id": "e-human-end",
+                "source": "human_approval",
+                "target": "__end__",
+                "type": "conditional",
+                "condition": {"field": "final_status", "operator": "not_in", "value": "approved,rejected"},
+            },
+            {"id": "e-notify-end", "source": "notify", "target": "__end__", "type": "normal"},
+        ],
+    },
+}

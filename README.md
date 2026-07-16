@@ -12,6 +12,8 @@
 - 自动化审批流程（风险评估、人机交互）
 - 复杂业务流程编排（条件路由、状态管理）
 
+**可视化界面**：提供基于 Vue 3 的工作流可视化编辑器，支持拖拽式节点编辑、条件路由配置、实时状态监控。
+
 ## 什么是 LangGraph
 
 `LangGraph` 是 LangChain 生态系统中的一个专门用于工作流编排的框架，它提供了一种声明式的方式来定义和执行基于语言模型的复杂工作流。
@@ -97,115 +99,53 @@ def router_node(state):
 - **API 安全**：API Key 认证 + 速率限制（60 请求/分钟/IP）
 - **可观测性**：请求 ID 中间件、结构化日志、健康检查、Prometheus 指标
 - **Docker 部署**：提供完整的容器化部署方案
+- **可视化编辑器**：基于 Vue 3 + Vue Flow 的工作流可视化编辑界面，支持拖拽、条件路由配置、实时状态监控
 
 ## 项目结构
 
 ```
 x-langgraph/
-├── src/                              # 业务代码（源码目录）
-│   ├── api/                          # API 接口层
-│   │   ├── routes/                   # 路由模块
-│   │   │   ├── __init__.py
-│   │   │   ├── chat.py               # 聊天接口（/chat）
-│   │   │   ├── approval.py           # 审批接口（/approval）
-│   │   │   ├── health.py             # 健康检查接口
-│   │   │   └── metrics.py            # Prometheus 指标接口
-│   │   ├── __init__.py
-│   │   └── router.py                 # 路由注册管理
-│   │
-│   ├── core/                         # 核心支撑层
-│   │   ├── __init__.py
-│   │   ├── config.py                 # 全局配置中心（支持 YAML + 环境变量）
-│   │   ├── logger.py                 # 日志配置（loguru）
-│   │   ├── exceptions.py             # 全局异常定义
-│   │   ├── middleware.py             # 中间件（请求ID、错误处理、CORS）
-│   │   └── container.py              # IOC 依赖注入容器
-│   │
-│   ├── services/                     # 业务逻辑层
-│   │   ├── __init__.py
-│   │   ├── base.py                   # Service 基类
-│   │   ├── chat_service.py           # 聊天业务逻辑
-│   │   └── approval_service.py       # 审批业务逻辑
-│   │
-│   ├── repositories/                 # 数据访问层
-│   │   ├── __init__.py
-│   │   ├── base.py                   # Repository 基类
-│   │   └── workflow_repository.py    # 工作流状态访问
-│   │
-│   ├── models/                       # ORM 实体层
-│   │   ├── __init__.py
-│   │   ├── base.py                   # SQLAlchemy Base
-│   │   └── workflow.py               # 工作流实体模型
-│   │
-│   ├── infras/                       # 基础设施层
-│   │   ├── __init__.py
-│   │   ├── mysql.py                  # MySQL 会话工厂
-│   │   ├── redis.py                  # Redis 客户端封装
-│   │   └── http_client.py            # 通用 HTTP 客户端
-│   │
-│   ├── schemas/                      # 数据模型层
-│   │   ├── __init__.py
-│   │   ├── chat.py                   # 聊天接口 Schema
-│   │   ├── approval.py               # 审批接口 Schema
-│   │   └── health.py                 # 健康检查 Schema
-│   │
-│   ├── constants/                    # 全局常量
-│   │   ├── __init__.py
-│   │   ├── develop.py                # 开发相关常量
-│   │   ├── streaming_modes.py        # 流式模式常量
-│   │   └── enums.py                  # 枚举定义（Environment 等）
-│   │
-│   ├── utils/                        # 工具函数
-│   │   └── __init__.py
-│   │
-│   ├── llm/                          # LLM 提供者模块
-│   │   ├── __init__.py
-│   │   ├── providers.py              # LLM 提供者（DeepSeek/豆包/阿里云）
-│   │   └── prompts.py                # 提示模板管理
-│   │
-│   ├── tools/                        # 工具模块
-│   │   ├── weather/                  # 天气工具（多 Provider）
-│   │   ├── __init__.py
-│   │   ├── base.py                   # 工具基类
-│   │   ├── search_tools.py           # 搜索工具
-│   │   ├── calculation_tools.py      # 计算工具
-│   │   ├── weather_tools.py          # 天气工具
-│   │   ├── data_tools.py             # 数据处理工具
-│   │   └── database_tools.py         # 数据库工具（Text2SQL）
-│   │
-│   ├── workflows/                    # 工作流模块
-│   │   ├── base.py                   # 工作流基类（BaseWorkflow）
-│   │   ├── checkpointer.py           # LangGraph Checkpointer（状态持久化）
-│   │   ├── simple_router/            # 简单路由工作流
-│   │   ├── customer_service/         # 智能客服工作流
-│   │   ├── rag_qa/                   # RAG 文档问答工作流
-│   │   ├── multi_agent/              # 多智能体协作工作流
-│   │   └── approval/                 # 自动化审批工作流
-│   │
-│   ├── __init__.py
-│   └── main.py                       # FastAPI 应用入口
+├── server/                           # 后端 API 服务
+│   ├── src/                          # Python 源码目录
+│   │   ├── api/                      # API 接口层
+│   │   │   ├── routes/               # 路由模块（chat.py, approval.py, workflows.py）
+│   │   │   └── router.py             # 路由注册管理
+│   │   ├── core/                     # 核心支撑层（config, logger, container, middleware）
+│   │   ├── services/                 # 业务逻辑层（chat_service, approval_service, workflow_service）
+│   │   ├── repositories/             # 数据访问层（workflow_repository, workflow_definition_repository）
+│   │   ├── models/                   # ORM 实体层
+│   │   ├── infras/                   # 基础设施层（mysql, redis, http_client）
+│   │   ├── schemas/                  # 数据模型层（Pydantic Schema）
+│   │   ├── llm/                      # LLM 提供者模块
+│   │   ├── tools/                    # 工具模块（weather, search, calculation）
+│   │   ├── workflows/                # 工作流模块（simple_router, approval, compiler）
+│   │   └── main.py                   # FastAPI 应用入口
+│   ├── examples/                     # 示例代码
+│   ├── tests/                        # 测试代码
+│   ├── data/                         # 工作流定义文件（JSON）
+│   ├── Dockerfile                    # Docker 镜像配置
+│   ├── docker-compose.yml            # Docker 编排配置
+│   ├── pyproject.toml                # Python 项目配置
+│   └── .env.example                  # 环境变量模板
 │
-├── docker/                           # Docker 配置
-│   └── mysql/
-│       └── init.sql                  # MySQL 初始化脚本
+├── web/                              # 前端可视化界面（Vue 3）
+│   ├── src/
+│   │   ├── components/               # 组件
+│   │   │   ├── graph/                # 图形组件（WorkflowCanvas, WorkflowNode, WorkflowEdge）
+│   │   │   └── panels/               # 面板组件（PropertyPanel, StateInspector, ExecutionLog）
+│   │   ├── stores/                   # Pinia 状态管理（workflow, execution）
+│   │   ├── api/                      # API 客户端（http, workflows, sse）
+│   │   ├── types/                    # TypeScript 类型定义
+│   │   ├── views/                    # 页面视图（WorkflowList, WorkflowEditor）
+│   │   └── router/                   # Vue Router
+│   ├── package.json                  # Node.js 依赖配置
+│   ├── vite.config.ts                # Vite 构建配置
+│   └── tailwind.config.js            # Tailwind CSS 配置
 │
-├── examples/                         # 示例代码
-│   ├── hello_world.py                # 基础示例
-│   ├── agent_workflow.py             # 基础工作流示例
-│   ├── demo_workflows.py             # 高级工作流示例
-│   └── langgraph_platform.py         # LangGraph Platform 部署示例
-│
-├── tests/                            # 测试代码
-├── scripts/                          # 运维脚本
-├── logs/                             # 运行时日志
-├── .env                              # 环境变量配置（私有，不提交）
-├── .env.example                      # 环境变量模板（公开，可提交）
-├── config.yaml                       # YAML 配置文件（可选）
-├── Dockerfile                        # Docker 镜像配置
-├── docker-compose.yml                # Docker 编排配置
-├── langgraph.json                    # LangGraph Platform 配置
-├── pyproject.toml                    # 项目配置
-└── README.md / README.en.md          # 项目文档
+├── .trae/                            # Trae AI 工具配置
+├── LICENSE                           # 许可证
+├── README.md                         # 中文文档
+└── README.en.md                      # 英文文档
 ```
 
 ## 系统架构
@@ -480,27 +420,52 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 uv run python -m examples.hello_world
 ```
 
+### 前端可视化界面启动
+
+```bash
+# 进入前端目录
+cd web
+
+# 安装依赖（首次启动）
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+前端启动后：
+- 可视化界面: <http://localhost:5173>
+- 工作流编辑器: <http://localhost:5173/editor/simple_router>
+
 ### 常用命令
 
 ```bash
-# Docker 相关
-docker-compose up -d          # 启动服务
-docker-compose down           # 停止服务
-docker-compose logs -f api    # 查看日志
-docker-compose restart api    # 重启 API
-
-# 本地开发
+# 后端相关（在 server/ 目录下）
 uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload  # 启动 API（推荐）
 uv run python -m examples.hello_world                            # 运行示例
 uv run pytest tests/ -v                                           # 运行测试
 
-# 代码质量
-uv run black src/ tests/               # 代码格式化
-uv run ruff check src/ tests/          # 代码检查
-uv run mypy src/                       # 类型检查
+# 前端相关（在 web/ 目录下）
+npm run dev                          # 启动开发服务器
+npm run build                        # 构建生产版本
+npm run check                        # TypeScript 类型检查
+npm run lint                         # 代码检查
+
+# Docker 相关（在 server/ 目录下）
+docker-compose up -d                 # 启动服务
+docker-compose down                  # 停止服务
+docker-compose logs -f api           # 查看日志
+docker-compose restart api           # 重启 API
+
+# 代码质量（后端）
+uv run black src/ tests/             # 代码格式化
+uv run ruff check src/ tests/        # 代码检查
+uv run mypy src/                     # 类型检查
 ```
 
 ## 技术栈
+
+### 后端技术栈
 
 | 分类           | 技术             | 说明                 |
 | ------------ | -------------- | ------------------ |
@@ -516,6 +481,19 @@ uv run mypy src/                       # 类型检查
 | **部署工具**     | Docker         | 容器化部署              |
 | <br />       | Docker Compose | 多容器编排              |
 | **包管理**      | uv             | 快速 Python 包管理器     |
+
+### 前端技术栈
+
+| 分类           | 技术                | 说明                     |
+| ------------ | ----------------- | ---------------------- |
+| **前端框架**    | Vue 3             | 渐进式 JavaScript 框架      |
+| **构建工具**    | Vite              | 快速开发构建工具              |
+| **状态管理**    | Pinia             | Vue 官方状态管理库             |
+| **路由**       | Vue Router        | Vue 路由管理               |
+| **图可视化**    | Vue Flow          | 基于 Vue 的节点图可视化库        |
+| **UI 框架**    | Tailwind CSS      | 原子化 CSS 框架             |
+| **图标**       | Lucide Vue        | 精美的图标库                |
+| **语言**       | TypeScript        | 类型安全的 JavaScript       |
 
 ## API 文档
 
@@ -540,6 +518,13 @@ uv run mypy src/                       # 类型检查
 | `/chat/stream`                  | POST | 流式聊天（SSE）            |
 | `/approval/resume`              | POST | 恢复审批工作流              |
 | `/approval/status/{session_id}` | GET  | 获取审批状态               |
+| `/workflows`                    | GET  | 获取工作流列表              |
+| `/workflows/{name}`             | GET  | 获取工作流详细定义            |
+| `/workflows/{name}`             | POST | 创建工作流                |
+| `/workflows/{name}`             | PUT  | 更新工作流                |
+| `/workflows/{name}`             | DELETE| 删除工作流                |
+| `/workflows/{name}/execute`     | POST | 执行工作流（同步）           |
+| `/workflows/{name}/stream`      | POST | 执行工作流（流式 SSE）        |
 
 ### API 认证
 
@@ -671,6 +656,83 @@ Settings
 ├── doubao          (DoubaoConfig)       - 豆包配置
 ├── aliyun          (AliyunConfig)       - 阿里云配置
 └── third_party     (ThirdPartyConfig)   - 第三方 API 配置
+```
+
+## 可视化界面
+
+### 功能概述
+
+工作流可视化编辑器提供图形化的工作流设计和管理能力，帮助开发者直观理解和操作 LangGraph 工作流。
+
+**核心功能**：
+- **工作流列表管理**：查看、搜索、创建、删除工作流定义
+- **可视化画布**：基于 Vue Flow 的节点图编辑器，支持拖拽、缩放、平移
+- **节点编辑**：添加、编辑、删除节点，配置节点属性（类型、Handler、位置、配置）
+- **边管理**：创建、编辑、删除边，支持普通边和条件边（条件路由）
+- **实时状态监控**：执行工作流时实时显示节点状态和边的流向
+- **执行日志**：查看工作流执行的完整日志记录
+
+### 界面布局
+
+可视化编辑器采用三栏布局：
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         顶部工具栏                                   │
+│  ← 返回  │  工作流名称  │  保存按钮                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌───────────────────────────┐  ┌─────────────┐  │
+│  │   左侧面板   │  │         中间画布           │  │   右侧面板   │  │
+│  │             │  │                           │  │             │  │
+│  │ • State     │  │   [START]  →  [router]    │  │ • 属性面板   │  │
+│  │   Schema    │  │             ↓    ↓    ↓    │  │ • 状态监控   │  │
+│  │             │  │        [search] [calc]    │  │ • 执行日志   │  │
+│  │ • 节点列表   │  │             ↓    ↓        │  │             │  │
+│  │             │  │         [END]             │  │             │  │
+│  └─────────────┘  └───────────────────────────┘  └─────────────┘  │
+├─────────────────────────────────────────────────────────────────────┤
+│                         底部执行栏                                   │
+│  输入消息 │ Session ID │ 执行按钮 │ 流式执行按钮 │ 停止按钮           │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 节点类型
+
+| 类型 | 颜色 | 图标 | 说明 |
+|------|------|------|------|
+| **router** | 紫色 | 🔀 | 路由节点，根据条件路由到不同分支 |
+| **processor** | 青色 | ⚙️ | 处理节点，执行业务逻辑 |
+| **tool** | 绿色 | 🛠️ | 工具节点，调用外部工具（搜索、计算、天气） |
+| **unknown** | 红色 | ❓ | 未知节点，处理无法识别的请求 |
+| **end** | 灰色 | ⏹️ | 结束节点，工作流终止点 |
+
+### 边类型
+
+| 类型 | 样式 | 说明 |
+|------|------|------|
+| **normal** | 实线 | 普通边，直接流转 |
+| **conditional** | 虚线 | 条件边，根据状态字段的值进行路由 |
+
+### 访问方式
+
+1. 启动后端 API 服务（端口 8000）
+2. 启动前端开发服务器（端口 5173）
+3. 浏览器访问：<http://localhost:5173>
+
+### 使用流程
+
+```
+1. 进入工作流列表页 → 查看所有工作流
+   ↓
+2. 点击工作流卡片 → 进入编辑器
+   ↓
+3. 查看画布上的节点和边
+   ↓
+4. 点击节点/边 → 在右侧属性面板编辑属性
+   ↓
+5. 在底部输入消息 → 点击执行按钮运行工作流
+   ↓
+6. 查看实时状态更新和执行日志
 ```
 
 ## 许可证
