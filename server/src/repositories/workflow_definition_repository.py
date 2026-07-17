@@ -178,10 +178,6 @@ class WorkflowDefinitionRepository:
     async def update(self, name: str, data: dict[str, Any]) -> Optional[dict[str, Any]]:
         """更新工作流定义"""
         try:
-            existing = await self.get_by_name(name)
-            if existing is None:
-                return None
-
             async def update_func(session):
                 result = await session.execute(
                     select(WorkflowDefinition)
@@ -252,14 +248,14 @@ class WorkflowDefinitionRepository:
 
                 await session.flush()
                 await session.refresh(instance)
-                return instance
+                return self._model_to_dict(instance)
 
             result = await session_factory.transaction_async(update_func)
             if result is None:
                 return None
 
             logger.info(f"Workflow definition updated: {name}")
-            return self._model_to_dict(result)
+            return result
         except Exception as e:
             logger.error(f"Failed to update workflow definition: {e}")
             raise DatabaseError(message=str(e))

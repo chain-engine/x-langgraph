@@ -15,7 +15,7 @@
 from tools.base import BaseTool, ToolResult
 from tools.search_tools import web_search_tool, document_search_tool
 from tools.calculation_tools import calculator_tool, unit_converter_tool
-from tools.weather import weather_query_tool
+from tools.weather_tool import weather_query_tool
 from tools.data_tools import csv_processor_tool, json_processor_tool
 from tools.database_tools import (
     text_to_sql_tool,

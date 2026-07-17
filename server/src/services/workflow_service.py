@@ -160,5 +160,4 @@ class WorkflowDefinitionService:
                 await self._repository.create(definition)
                 logger.info(f"Seeded workflow: {definition['name']}")
             else:
-                await self._repository.update(definition["name"], definition)
-                logger.info(f"Updated workflow: {definition['name']}")
+                logger.info(f"Workflow already exists, skipping: {definition['name']}")
