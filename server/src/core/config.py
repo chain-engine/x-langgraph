@@ -139,6 +139,14 @@ class AliyunConfig:
 
 
 @dataclass
+class MimoConfig:
+    """小米 Mimo 配置"""
+    api_key: str = ""
+    api_base: str = "https://api.mimo.ai/v1"
+    model_name: str = "mimo-v2.5-pro"
+
+
+@dataclass
 class ThirdPartyConfig:
     """第三方API配置"""
     amap_api_key: str = ""
@@ -296,6 +304,11 @@ class Settings:
                 'api_base': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
                 'model_name': 'qwen-turbo'
             },
+            'mimo': {
+                'api_key': '',
+                'api_base': 'https://api.mimo.ai/v1',
+                'model_name': 'mimo-v2.5-pro'
+            },
             'third_party': {
                 'amap_api_key': '',
                 'search_api_key': '',
@@ -396,6 +409,13 @@ class Settings:
         if (value := os.environ.get('ALIYUN_MODEL_NAME')):
             config['aliyun']['model_name'] = value
 
+        if (value := os.environ.get('MIMO_API_KEY')):
+            config['mimo']['api_key'] = value
+        if (value := os.environ.get('MIMO_API_BASE')):
+            config['mimo']['api_base'] = value
+        if (value := os.environ.get('MIMO_MODEL_NAME')):
+            config['mimo']['model_name'] = value
+
         if (value := os.environ.get('AMAP_API_KEY')):
             config['third_party']['amap_api_key'] = value
         if (value := os.environ.get('SEARCH_API_KEY')):
@@ -427,6 +447,7 @@ class Settings:
         self.deepseek = DeepSeekConfig(**self._config['deepseek'])
         self.doubao = DoubaoConfig(**self._config['doubao'])
         self.aliyun = AliyunConfig(**self._config['aliyun'])
+        self.mimo = MimoConfig(**self._config['mimo'])
         self.third_party = ThirdPartyConfig(**self._config['third_party'])
 
     @property
@@ -450,7 +471,9 @@ class Settings:
         self._parse_config()
 
     def get_available_provider(self) -> str:
-        """返回第一个有 API Key 的提供者"""
+        """返回第一个有 API Key 的提供者（优先级：mimo > deepseek > doubao > aliyun > mock）"""
+        if self.mimo.api_key:
+            return "mimo"
         if self.deepseek.api_key:
             return "deepseek"
         if self.doubao.api_key:
@@ -461,11 +484,13 @@ class Settings:
 
     def has_valid_api_key(self) -> bool:
         """检查是否有可用的 API Key"""
-        return bool(self.deepseek.api_key or self.doubao.api_key or self.aliyun.api_key)
+        return bool(self.mimo.api_key or self.deepseek.api_key or self.doubao.api_key or self.aliyun.api_key)
 
     def validate_model_config(self, model_name: str) -> bool:
         """验证模型配置是否完整"""
-        if model_name == "deepseek":
+        if model_name == "mimo":
+            return bool(self.mimo.api_key and self.mimo.model_name)
+        elif model_name == "deepseek":
             return bool(self.deepseek.api_key and self.deepseek.model_name)
         elif model_name == "doubao":
             return bool(self.doubao.api_key and self.doubao.model_name)
@@ -498,153 +523,170 @@ class Settings:
 
     @property
     def DEBUG(self) -> bool:
-        """兼容旧代码的调试模式属性"""
+        """调试模式属性"""
         return self.app_debug
 
     @property
     def API_HOST(self) -> str:
-        """兼容旧代码的 API 主机属性"""
+        """API 主机属性"""
         return self.server.host
 
     @property
     def API_PORT(self) -> int:
-        """兼容旧代码的 API 端口属性"""
+        """API 端口属性"""
         return self.server.port
 
     @property
     def API_RELOAD(self) -> bool:
-        """兼容旧代码的 API 热重载属性"""
+        """API 热重载属性"""
         return self.server.reload
 
     @property
     def API_KEY(self) -> str:
-        """兼容旧代码的 API 访问密钥属性"""
+        """API 访问密钥属性"""
         return self.third_party.api_key
 
     @property
     def LOG_LEVEL(self) -> str:
-        """兼容旧代码的日志级别属性"""
+        """日志级别属性"""
         return self.logging.level
 
     @property
     def LOG_DIR(self) -> str:
-        """兼容旧代码的日志目录属性"""
+        """日志目录属性"""
         return self.logging.file_path.rsplit('/', 1)[0] if '/' in self.logging.file_path else 'logs'
 
     @property
     def TEMPERATURE(self) -> float:
-        """兼容旧代码的温度参数属性"""
+        """温度参数属性"""
         return self.llm.temperature
 
     @property
     def STRUCTURED(self) -> bool:
-        """兼容旧代码的结构化输出模式属性"""
+        """结构化输出模式属性"""
         return self.llm.structured
 
     @property
     def DEEPSEEK_API_KEY(self) -> str:
-        """兼容旧代码的 DeepSeek API 密钥属性"""
+        """DeepSeek API 密钥属性"""
         return self.deepseek.api_key
 
     @property
     def DEEPSEEK_API_BASE(self) -> str:
-        """兼容旧代码的 DeepSeek API 基础地址属性"""
+        """DeepSeek API 基础地址属性"""
         return self.deepseek.api_base
 
     @property
     def DEEPSEEK_MODEL_NAME(self) -> str:
-        """兼容旧代码的 DeepSeek 模型名称属性"""
+        """DeepSeek 模型名称属性"""
         return self.deepseek.model_name
 
     @property
     def DOUBAO_API_KEY(self) -> str:
-        """兼容旧代码的豆包 API 密钥属性"""
+        """豆包 API 密钥属性"""
         return self.doubao.api_key
 
     @property
     def DOUBAO_API_BASE(self) -> str:
-        """兼容旧代码的豆包 API 基础地址属性"""
+        """豆包 API 基础地址属性"""
         return self.doubao.api_base
 
     @property
     def DOUBAO_MODEL_NAME(self) -> str:
-        """兼容旧代码的豆包模型名称属性"""
+        """豆包模型名称属性"""
         return self.doubao.model_name
 
     @property
     def ALIYUN_API_KEY(self) -> str:
-        """兼容旧代码的阿里云 API 密钥属性"""
+        """阿里云 API 密钥属性"""
         return self.aliyun.api_key
 
     @property
     def ALIYUN_API_BASE(self) -> str:
-        """兼容旧代码的阿里云 API 基础地址属性"""
+        """阿里云 API 基础地址属性"""
         return self.aliyun.api_base
 
     @property
+    def MIMO_API_KEY(self) -> str:
+        """小米 Mimo API 密钥属性"""
+        return self.mimo.api_key
+
+    @property
+    def MIMO_API_BASE(self) -> str:
+        """小米 Mimo API 基础地址属性"""
+        return self.mimo.api_base
+
+    @property
+    def MIMO_MODEL_NAME(self) -> str:
+        """小米 Mimo 模型名称属性"""
+        return self.mimo.model_name
+
+    @property
     def ALIYUN_MODEL_NAME(self) -> str:
-        """兼容旧代码的阿里云模型名称属性"""
+        """阿里云模型名称属性"""
         return self.aliyun.model_name
 
     @property
     def DB_HOST(self) -> str:
-        """兼容旧代码的数据库主机属性"""
+        """数据库主机属性"""
         return self.database.host
 
     @property
     def DB_PORT(self) -> int:
-        """兼容旧代码的数据库端口属性"""
+        """数据库端口属性"""
         return self.database.port
 
     @property
     def DB_USER(self) -> str:
-        """兼容旧代码的数据库用户属性"""
+        """数据库用户属性"""
         return self.database.user
 
     @property
     def DB_PASSWORD(self) -> str:
-        """兼容旧代码的数据库密码属性"""
+        """数据库密码属性"""
         return self.database.password
 
     @property
     def DB_NAME(self) -> str:
-        """兼容旧代码的数据库名称属性"""
+        """数据库名称属性"""
         return self.database.name
 
     @property
     def REDIS_HOST(self) -> str:
-        """兼容旧代码的 Redis 主机属性"""
+        """Redis 主机属性"""
         return self.redis.host
 
     @property
     def REDIS_PORT(self) -> int:
-        """兼容旧代码的 Redis 端口属性"""
+        """Redis 端口属性"""
         return self.redis.port
 
     @property
     def REDIS_PASSWORD(self) -> str:
-        """兼容旧代码的 Redis 密码属性"""
+        """Redis 密码属性"""
         return self.redis.password
 
     @property
     def REDIS_DB(self) -> int:
-        """兼容旧代码的 Redis 数据库属性"""
+        """Redis 数据库属性"""
         return self.redis.db
 
     @property
     def AMAP_API_KEY(self) -> str:
-        """兼容旧代码的高德地图 API 密钥属性"""
+        """高德地图 API 密钥属性"""
         return self.third_party.amap_api_key
 
     @property
     def SEARCH_API_KEY(self) -> str:
-        """兼容旧代码的搜索 API 密钥属性"""
+        """搜索 API 密钥属性"""
         return self.third_party.search_api_key
 
     @property
     def SEARCH_API_URL(self) -> str:
-        """兼容旧代码的搜索 API 地址属性"""
+        """搜索 API 地址属性"""
         return self.third_party.search_api_url
+
+
 
 
 settings: Final[Settings] = Settings()

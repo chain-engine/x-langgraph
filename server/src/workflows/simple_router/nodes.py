@@ -90,23 +90,106 @@ def _llm_routing(user_input: str) -> RouteDecision:
         RouteDecision 路由决策
     """
     from llms.providers import get_llm_provider
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_core.output_parsers import JsonOutputParser
+    import json
 
     # 获取可用的 LLM 提供者
     provider_name = settings.get_available_provider()
     provider = get_llm_provider(provider_name)
 
-    # 配置结构化输出
-    structured_llm = provider.chat_model.with_structured_output(RouteDecision)
+    # 构建提示，包含 JSON 格式要求
+    system_prompt = f"""{ROUTING_SYSTEM_PROMPT}
 
-    # 构建提示
-    from langchain_core.messages import HumanMessage, SystemMessage
+请严格按照以下 JSON 格式返回结果：
+{{
+    "route": "路由目标节点：search/calculate/weather/unknown",
+    "reasoning": "路由决策的理由",
+    "confidence": 0.0-1.0之间的置信度
+}}
+
+只返回 JSON，不要其他内容。"""
+    
     messages = [
-        SystemMessage(content=ROUTING_SYSTEM_PROMPT),
+        SystemMessage(content=system_prompt),
         HumanMessage(content=ROUTING_USER_PROMPT.format(user_input=user_input)),
     ]
 
-    # 调用 LLM
-    return structured_llm.invoke(messages)
+    try:
+        # 先尝试使用结构化输出
+        structured_llm = provider.chat_model.with_structured_output(RouteDecision)
+        return structured_llm.invoke(messages)
+    except Exception as e:
+        # 如果结构化输出失败，使用 JSON 解析方式
+        logger.debug(f"结构化输出失败，使用 JSON 解析: {e}")
+        
+        # 为某些模型（如 Mimi）优化提示
+        enhanced_system_prompt = f"""{ROUTING_SYSTEM_PROMPT}
+
+请严格按照以下 JSON 格式返回结果，不要添加任何其他内容：
+{{
+    "route": "search|calculate|weather|unknown",
+    "reasoning": "详细的路由决策理由",
+    "confidence": 0.0-1.0之间的数字
+}}
+
+注意：只返回有效的 JSON 对象，不要有任何解释文字。"""
+        
+        enhanced_messages = [
+            SystemMessage(content=enhanced_system_prompt),
+            HumanMessage(content=ROUTING_USER_PROMPT.format(user_input=user_input)),
+        ]
+        
+        # 调用 LLM 获取 JSON 格式的响应
+        response = provider.chat_model.invoke(enhanced_messages)
+        
+        try:
+            # 尝试从响应中提取 JSON
+            import re
+            # 尝试多种可能的 JSON 格式
+            json_patterns = [
+                r'\{[^{}]*(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*)*\}',  # 支持嵌套
+                r'\{.*?\}',  # 非贪婪匹配
+            ]
+            
+            json_str = None
+            for pattern in json_patterns:
+                match = re.search(pattern, response.content, re.DOTALL)
+                if match:
+                    json_str = match.group()
+                    break
+            
+            if json_str:
+                import json
+                json_data = json.loads(json_str)
+                
+                # 验证并创建 RouteDecision 对象
+                route = json_data.get("route", "unknown")
+                if route not in ["search", "calculate", "weather", "unknown"]:
+                    route = "unknown"
+                    
+                reasoning = json_data.get("reasoning", "基于用户输入的默认路由")
+                confidence = min(max(float(json_data.get("confidence", 0.5)), 0.0), 1.0)
+                
+                return RouteDecision(
+                    route=route,
+                    reasoning=reasoning,
+                    confidence=confidence
+                )
+            else:
+                # 如果没有找到 JSON，使用默认路由
+                return RouteDecision(
+                    route="unknown",
+                    reasoning="无法解析 LLM 响应",
+                    confidence=0.1
+                )
+        except json.JSONDecodeError:
+            logger.error("无法解析 LLM 返回的 JSON")
+            return RouteDecision(
+                route="unknown", 
+                reasoning="LLM 响应格式错误",
+                confidence=0.1
+            )
 
 
 def _fallback_routing(user_input: str) -> dict:

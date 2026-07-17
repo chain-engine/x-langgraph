@@ -27,7 +27,7 @@ logger.add(
     rotation="1 hour",
     retention="7 days",
     compression="zip",
-    level=settings.DEBUG and "DEBUG" or "INFO",
+    level="INFO",
     enqueue=True,
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
 )
@@ -35,7 +35,7 @@ logger.add(
 console_sink: Callable[[str], None] = lambda msg: print(msg, end="")
 logger.add(
     sink=console_sink,
-    level=settings.DEBUG and "DEBUG" or "INFO",
+    level="INFO",
     enqueue=True,
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
 )

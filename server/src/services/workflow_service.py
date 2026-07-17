@@ -105,7 +105,9 @@ class WorkflowDefinitionService:
             return
 
         try:
+            # 将工作流定义编译为 LangGraph StateGraph 执行图
             graph = compile_workflow(definition)
+            # 构建初始状态：将用户消息注入到 state_schema 定义的字段中
             initial_state = self._build_initial_state(definition, message)
 
             async for event in graph.astream(

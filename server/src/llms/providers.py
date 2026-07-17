@@ -245,6 +245,40 @@ class AliyunProvider(BaseLLMProvider):
         )
 
 
+class MimoProvider(BaseLLMProvider):
+    """
+    小米 Mimo LLM 提供者
+
+    支持的模型：
+    - mimo-v2.5-pro
+    """
+
+    name = "mimo"
+    description = "小米 Mimo 模型提供者"
+
+    def _get_default_config(self) -> LLMConfig:
+        """获取 Mimo 默认配置"""
+        return LLMConfig(
+            api_key=settings.MIMO_API_KEY,
+            api_base=settings.MIMO_API_BASE,
+            model_name=settings.MIMO_MODEL_NAME,
+            temperature=settings.TEMPERATURE,
+        )
+
+    def create_chat_model(self, **kwargs) -> BaseChatModel:
+        """创建 Mimo 聊天模型"""
+        logger.info(f"创建 Mimo 聊天模型: {self.config.model_name}")
+
+        return ChatOpenAI(
+            api_key=self.config.api_key,
+            base_url=self.config.api_base,
+            model=self.config.model_name,
+            temperature=kwargs.get("temperature", self.config.temperature),
+            max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
+            timeout=kwargs.get("timeout", self.config.timeout),
+        )
+
+
 class MockProvider(BaseLLMProvider):
     """
     模拟 LLM 提供者（用于测试）
@@ -300,6 +334,7 @@ _PROVIDERS: dict[str, type[BaseLLMProvider]] = {
     "deepseek": DeepSeekProvider,
     "doubao": DoubaoProvider,
     "aliyun": AliyunProvider,
+    "mimo": MimoProvider,
     "mock": MockProvider,
 }
 
@@ -309,7 +344,7 @@ def get_llm_provider(provider_name: str, config: Optional[LLMConfig] = None) -> 
     获取 LLM 提供者实例
 
     Args:
-        provider_name: 提供者名称（deepseek, doubao, aliyun, mock）
+        provider_name: 提供者名称（deepseek, doubao, aliyun, mimo, mock）
         config: 自定义配置（可选）
 
     Returns:
