@@ -78,8 +78,11 @@ class WorkflowDefinitionService:
             return {"error": f"工作流不存在: {workflow_name}", "response": "", "session_id": session_id}
 
         try:
+            # 将工作流定义编译为 LangGraph StateGraph 执行图
             graph = compile_workflow(definition)
+            # 构建初始状态：将用户消息注入到 state_schema 定义的字段中
             initial_state = self._build_initial_state(definition, message)
+            # 异步执行工作流图，thread_id 用于 LangGraph 的持久化和检查点机制
             result = await graph.ainvoke(
                 initial_state,
                 config={"configurable": {"thread_id": session_id}},
