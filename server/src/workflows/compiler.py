@@ -41,7 +41,8 @@ def _register_handlers():
 
 def _get_state_class(state_schema: dict[str, str]):
     """根据 state_schema 动态构建 TypedDict"""
-    from typing import TypedDict, Optional
+    from typing import TypedDict, Optional, Annotated
+    from langgraph.graph import add_messages
     fields = {}
     for field_name, field_type in state_schema.items():
         py_type = {
@@ -54,6 +55,8 @@ def _get_state_class(state_schema: dict[str, str]):
         if field_type.startswith("Optional"):
             py_type = Optional[py_type]
         fields[field_name] = py_type
+    if "messages" not in fields:
+        fields["messages"] = Annotated[list, add_messages]
     return TypedDict("DynamicState", fields)  # type: ignore
 
 
@@ -102,6 +105,8 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None):
 
     # 添加边
     conditional_map: dict[str, dict[str, str]] = {}
+    conditional_default: dict[str, str] = {}
+    conditional_field: dict[str, str] = {}
     for edge in edges:
         source = edge["source"]
         target = edge["target"]
@@ -110,12 +115,17 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None):
         if edge_type == "conditional":
             condition = edge.get("condition", {})
             field_name = condition.get("field", "route")
+            operator = condition.get("operator", "==")
             expected_value = condition.get("value", "")
 
             if source not in conditional_map:
                 conditional_map[source] = {}
+                conditional_field[source] = field_name
 
-            conditional_map[source][expected_value] = target
+            if operator == "!=":
+                conditional_default[source] = target
+            else:
+                conditional_map[source][expected_value] = target
         else:
             if target == "__end__":
                 workflow.add_edge(source, END)
@@ -128,9 +138,17 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None):
         if "__end__" in mapping:
             mapping["__end__"] = END
 
-        route_fn = _make_route_fn(source, list(conditional_map.keys()))
+        default_target = conditional_default.get(source)
+        if default_target:
+            if default_target == "__end__":
+                default_target = END
+            if str(default_target) not in mapping:
+                mapping[str(default_target)] = default_target
+
+        field_name = conditional_field.get(source, "route")
+        route_fn = _make_route_fn(field_name, list(mapping.keys()), default_target)
         workflow.add_conditional_edges(source, route_fn, mapping)
-        logger.debug(f"Added conditional edges from {source}: {mapping}")
+        logger.debug(f"Added conditional edges from {source}: {mapping}, default: {default_target}")
 
     cp = checkpointer or MemorySaver()
     compiled = workflow.compile(checkpointer=cp)
@@ -143,10 +161,21 @@ def _passthrough_handler(state: dict) -> dict:
     return {"output": state.get("input", ""), "error": None}
 
 
-def _make_route_fn(field_name: str, _hint=None):
+def _make_route_fn(field_name: str, allowed_values=None, default_target=None):
     """创建条件路由函数"""
+    allowed_values = allowed_values or []
+    expanded_values = []
+    for val in allowed_values:
+        if ',' in val:
+            expanded_values.extend([v.strip() for v in val.split(',')])
+        else:
+            expanded_values.append(val)
     def route_fn(state: dict) -> str:
         value = state.get(field_name, state.get("route", "unknown"))
-        logger.info(f"Conditional routing [{field_name}]: {value}")
-        return value
+        value_str = str(value)
+        if value_str not in expanded_values and default_target:
+            logger.info(f"Conditional routing [{field_name}]: {value_str}, using default: {default_target}")
+            return default_target
+        logger.info(f"Conditional routing [{field_name}]: {value_str}")
+        return value_str
     return route_fn

@@ -147,6 +147,8 @@ class WorkflowDefinitionService:
                 state[field_name] = None
             else:
                 state[field_name] = None
+        if "messages" not in state:
+            state["messages"] = []
         return state
 
     async def seed_builtin_workflows(self):
@@ -157,3 +159,6 @@ class WorkflowDefinitionService:
             if existing is None:
                 await self._repository.create(definition)
                 logger.info(f"Seeded workflow: {definition['name']}")
+            else:
+                await self._repository.update(definition["name"], definition)
+                logger.info(f"Updated workflow: {definition['name']}")

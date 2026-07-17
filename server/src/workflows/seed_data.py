@@ -6,7 +6,7 @@
 """
 
 SIMPLE_ROUTER_DEF = {
-    "name": "simple_router",
+    "name": "简单路由工作流",
     "description": "简单路由工作流：根据输入自动路由到搜索、计算或天气节点",
     "state_schema": {
         "input": "str",
@@ -101,10 +101,9 @@ SIMPLE_ROUTER_DEF = {
 }
 
 APPROVAL_DEF = {
-    "name": "approval",
+    "name": "自动化审批工作流",
     "description": "自动化审批工作流：支持自动审批和人工审批（Human-in-the-Loop）",
     "state_schema": {
-        "messages": "list",
         "request": "dict",
         "approval_level": "str",
         "approval_status": "str",

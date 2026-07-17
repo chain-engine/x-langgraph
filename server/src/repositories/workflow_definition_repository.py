@@ -118,15 +118,15 @@ class WorkflowDefinitionRepository:
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """创建工作流定义"""
         try:
+            graph_data = data.get("graph_data", {})
+
             instance = WorkflowDefinition(
                 name=data["name"],
                 description=data.get("description"),
-                entry_point=data.get("entry_point"),
+                entry_point=data.get("entry_point") or graph_data.get("entry_point"),
                 human_in_the_loop=data.get("human_in_the_loop"),
                 config=data.get("config"),
             )
-
-            graph_data = data.get("graph_data", {})
             for node_data in graph_data.get("nodes", []):
                 pos = node_data.get("position", {})
                 node = WorkflowDefinitionNode(
@@ -183,13 +183,14 @@ class WorkflowDefinitionRepository:
                 return None
 
             async def update_func(session):
-                instance: WorkflowDefinition | None = await session.execute(
+                result = await session.execute(
                     select(WorkflowDefinition)
                     .filter_by(name=name)
                     .options(selectinload(WorkflowDefinition.nodes))
                     .options(selectinload(WorkflowDefinition.edges))
                     .options(selectinload(WorkflowDefinition.state_fields))
-                ).scalar_one_or_none()
+                )
+                instance: WorkflowDefinition | None = result.scalar_one_or_none()
                 if instance is None:
                     return None
 
@@ -197,17 +198,20 @@ class WorkflowDefinitionRepository:
                     instance.name = data["name"]
                 if "description" in data:
                     instance.description = data["description"]
-                if "entry_point" in data:
-                    instance.entry_point = data["entry_point"]
                 if "human_in_the_loop" in data:
                     instance.human_in_the_loop = data["human_in_the_loop"]
                 if "config" in data:
                     instance.config = data["config"]
 
+                if "entry_point" in data:
+                    instance.entry_point = data["entry_point"]
+
                 if "graph_data" in data:
                     instance.nodes.clear()
                     instance.edges.clear()
                     graph_data = data["graph_data"]
+                    if "entry_point" not in data and "entry_point" in graph_data:
+                        instance.entry_point = graph_data["entry_point"]
 
                     for node_data in graph_data.get("nodes", []):
                         pos = node_data.get("position", {})
