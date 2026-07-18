@@ -76,8 +76,6 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 )
                 yield f"data: {stream_event.model_dump_json()}\n\n"
 
-            yield f"data: {json.dumps({'event': 'done'})}\n\n"
-
         except Exception as e:
             logger.error(f"流式聊天处理失败: {e}")
             error_event = StreamEvent(event="error", data=str(e))

@@ -110,19 +110,23 @@ class WorkflowDefinitionService:
             # 构建初始状态：将用户消息注入到 state_schema 定义的字段中
             initial_state = self._build_initial_state(definition, message)
 
+            latest_state: dict[str, Any] = {}
             async for event in graph.astream(
                 initial_state,
                 config={"configurable": {"thread_id": session_id}},
                 stream_mode="updates",
             ):
                 for node_name, node_output in event.items():
+                    if isinstance(node_output, dict):
+                        latest_state.update(node_output)
                     yield {
                         "event": "node_update",
                         "node": node_name,
                         "data": node_output,
                     }
 
-            yield {"event": "done", "data": None}
+            response = latest_state.get("output", latest_state.get("final_decision", ""))
+            yield {"event": "done", "data": {"response": response, "state": latest_state}}
         except Exception as e:
             logger.error(f"Workflow stream failed: {e}", exc_info=True)
             yield {"event": "error", "data": str(e)}

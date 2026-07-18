@@ -82,6 +82,14 @@ export const useExecutionStore = defineStore('execution', () => {
         if (event.event === 'done') {
           isRunning.value = false
           currentNode.value = null
+          if (event.data) {
+            if (event.data.response) {
+              result.value = event.data.response
+            }
+            if (event.data.state) {
+              stateSnapshot.value = event.data.state
+            }
+          }
         }
 
         if (event.event === 'error') {
