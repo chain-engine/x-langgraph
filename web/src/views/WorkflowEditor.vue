@@ -43,7 +43,6 @@ async function save() {
 
 async function handleUpdateNode(node: NodeDefinition) {
   await store.updateNode(node.id, node)
-  selectedNode.value = null
 }
 
 async function handleDeleteNode(nodeId: string) {
@@ -53,7 +52,6 @@ async function handleDeleteNode(nodeId: string) {
 
 async function handleUpdateEdge(edge: EdgeDefinition) {
   await store.updateEdge(edge.id, edge)
-  selectedEdge.value = null
 }
 
 async function handleDeleteEdge(edgeId: string) {
@@ -90,10 +88,6 @@ async function handleNodeDrop(nodeType: string, position: { x: number; y: number
     config: {},
   }
   await store.addNode(node)
-  const saved = store.current?.graph_data.nodes.find((n) => n.id === id)
-  if (saved) {
-    saved.position = position
-  }
 }
 
 async function handleEdgeConnect(connection: any) {

@@ -162,8 +162,20 @@ class WorkflowDefinitionService:
 
     async def seed_builtin_workflows(self):
         """生成内置工作流种子数据"""
-        from workflows.seed_data import INTENT_CLASSIFIER_DEF, APPROVAL_DEF
-        for definition in [INTENT_CLASSIFIER_DEF, APPROVAL_DEF]:
+        from workflows.seed_data import (
+            INTENT_CLASSIFIER_DEF,
+            APPROVAL_DEF,
+            RAG_QA_DEF,
+            CUSTOMER_SERVICE_DEF,
+            MULTI_AGENT_DEF,
+        )
+        for definition in [
+            INTENT_CLASSIFIER_DEF,
+            APPROVAL_DEF,
+            RAG_QA_DEF,
+            CUSTOMER_SERVICE_DEF,
+            MULTI_AGENT_DEF,
+        ]:
             existing = await self._repository.get_by_name(definition["name"])
             if existing is None:
                 await self._repository.create(definition)

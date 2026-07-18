@@ -301,12 +301,14 @@ class WorkflowDefinitionRepository:
             return None
         graph = wf.get("graph_data", {})
         nodes = graph.get("nodes", [])
+        updated = False
         for i, n in enumerate(nodes):
             if n.get("id") == node_id:
-                n.update(node_data)
-                n["id"] = node_id
-                nodes[i] = n
+                nodes[i] = {**n, **node_data, "id": node_id}
+                updated = True
                 break
+        if not updated:
+            nodes.append({**node_data, "id": node_id})
         graph["nodes"] = nodes
         wf["graph_data"] = graph
         return await self.update(workflow_name, wf)
@@ -341,12 +343,14 @@ class WorkflowDefinitionRepository:
             return None
         graph = wf.get("graph_data", {})
         edges = graph.get("edges", [])
+        updated = False
         for i, e in enumerate(edges):
             if e.get("id") == edge_id:
-                e.update(edge_data)
-                e["id"] = edge_id
-                edges[i] = e
+                edges[i] = {**e, **edge_data, "id": edge_id}
+                updated = True
                 break
+        if not updated:
+            edges.append({**edge_data, "id": edge_id})
         graph["edges"] = edges
         wf["graph_data"] = graph
         return await self.update(workflow_name, wf)
