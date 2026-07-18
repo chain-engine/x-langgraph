@@ -83,15 +83,15 @@ __all__ = [
     "editor_node",
     "reviewer_node",
     # 路由函数
-    "route_to_agent",
-    "should_continue",
+    "route_to_agent_node",
+    "should_continue_node",
     # Handoff 预留
     "create_handoff",
     "execute_handoff",
     "initiate_handoff",
     "route_with_handoff",
     # 并行执行预留
-    "route_for_parallel",
+    "route_for_parallel_node",
     # Tool Calling 预留
     "bind_tools_to_agent",
     "create_researcher_with_tools",
