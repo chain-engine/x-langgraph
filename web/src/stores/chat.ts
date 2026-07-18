@@ -14,7 +14,7 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const isStreaming = ref(false)
   const currentSessionId = ref('chat-' + Date.now().toString(36))
-  const currentWorkflow = ref('simple_router')
+  const currentWorkflow = ref('')
   const lastNode = ref<string | null>(null)
 
   let abortController: AbortController | null = null

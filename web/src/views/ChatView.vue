@@ -24,10 +24,13 @@ const workflowOptions = computed(() => {
 
 import { computed } from 'vue'
 
-onMounted(() => {
-  workflowStore.fetchList()
-  const wf = (route.query.workflow as string) || 'simple_router'
-  chat.setWorkflow(wf)
+onMounted(async () => {
+  await workflowStore.fetchList()
+  const list = workflowStore.list
+  if (list.length === 0) return
+  const queryWf = route.query.workflow as string | undefined
+  const exists = queryWf && list.some((w) => w.name === queryWf)
+  chat.setWorkflow(exists ? queryWf : list[0].name)
 })
 
 watch(chat.messages, async () => {
