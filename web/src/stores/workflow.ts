@@ -7,6 +7,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const list = ref<WorkflowSummary[]>([])
   const current = ref<WorkflowDefinition | null>(null)
   const loading = ref(false)
+  const handlers = ref<Array<{ id: string; name: string }>>([])
 
   async function fetchList() {
     loading.value = true
@@ -25,6 +26,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  async function fetchHandlers() {
+    const res = await workflowApi.listHandlers()
+    handlers.value = res.handlers
   }
 
   async function saveWorkflow(wf: WorkflowDefinition) {
@@ -48,6 +54,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
   async function addNode(node: any) {
     if (!current.value) return
     current.value = await workflowApi.addNode(current.value.name, node)
+    // 第一个节点自动设为入口点
+    if (current.value.graph_data.nodes.length === 1) {
+      current.value.graph_data.entry_point = node.id
+      await workflowApi.update(current.value.name, current.value)
+    }
   }
 
   async function updateNode(nodeId: string, node: any) {
@@ -79,8 +90,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
     list,
     current,
     loading,
+    handlers,
     fetchList,
     fetchWorkflow,
+    fetchHandlers,
     saveWorkflow,
     deleteWorkflow,
     addNode,

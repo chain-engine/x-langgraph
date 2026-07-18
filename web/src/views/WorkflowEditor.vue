@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Save, Database, Settings2, Activity, ScrollText } from 'lucide-vue-next'
 import { useWorkflowStore } from '@/stores/workflow'
 import WorkflowCanvas from '@/components/graph/WorkflowCanvas.vue'
+import NodePalette from '@/components/panels/NodePalette.vue'
 import PropertyPanel from '@/components/panels/PropertyPanel.vue'
 import StateInspector from '@/components/panels/StateInspector.vue'
 import ExecutionLog from '@/components/panels/ExecutionLog.vue'
@@ -20,7 +21,15 @@ const selectedEdge = ref<EdgeDefinition | null>(null)
 
 const workflowName = route.params.name as string
 
-onMounted(() => store.fetchWorkflow(workflowName))
+onMounted(() => {
+  // 新建跳转时通过 router state 传入数据，避免重复请求
+  const passed = history.state?.workflow as any
+  if (passed && passed.name === workflowName) {
+    store.current = passed
+  } else {
+    store.fetchWorkflow(workflowName)
+  }
+})
 
 function goBack() {
   router.push('/')
@@ -64,6 +73,41 @@ function handleSelectEdge(edge: EdgeDefinition | null) {
   if (edge) activeTab.value = 'property'
 }
 
+async function handleNodeDrop(nodeType: string, position: { x: number; y: number }) {
+  if (!store.current) return
+  const id = `${nodeType}_${Date.now()}`
+  const label =
+    nodeType === 'processor' ? 'New Processor'
+    : nodeType === 'router' ? 'New Router'
+    : nodeType === 'tool' ? 'New Tool'
+    : 'New Unknown'
+  const node: NodeDefinition = {
+    id,
+    type: nodeType,
+    label,
+    position,
+    handler: '',
+    config: {},
+  }
+  await store.addNode(node)
+  const saved = store.current?.graph_data.nodes.find((n) => n.id === id)
+  if (saved) {
+    saved.position = position
+  }
+}
+
+async function handleEdgeConnect(connection: any) {
+  if (!store.current) return
+  const id = `edge_${Date.now()}`
+  const edge: EdgeDefinition = {
+    id,
+    source: connection.source,
+    target: connection.target,
+    type: 'normal',
+  }
+  await store.addEdge(edge)
+}
+
 const tabs = [
   { key: 'property' as const, label: '属性', icon: Settings2 },
   { key: 'state' as const, label: '状态', icon: Activity },
@@ -97,8 +141,10 @@ const tabs = [
 
     <!-- 主体三栏 -->
     <div class="flex flex-1 overflow-hidden">
-      <!-- 左侧：工作流信息 -->
+      <!-- 左侧：节点面板 + 工作流信息 -->
       <aside class="w-60 shrink-0 border-r border-zinc-200 bg-white overflow-y-auto">
+        <NodePalette />
+
         <div class="p-4">
           <h3 class="flex items-center gap-1.5 text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wide">
             <Database :size="13" /> State Schema
@@ -148,6 +194,8 @@ const tabs = [
           @select-node="handleSelectNode"
           @select-edge="handleSelectEdge"
           @save="save"
+          @node-drop="handleNodeDrop"
+          @edge-connect="handleEdgeConnect"
         />
       </main>
 

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { Settings2, ChevronDown } from 'lucide-vue-next'
 import type { NodeDefinition, EdgeDefinition } from '@/types/workflow'
+import { useWorkflowStore } from '@/stores/workflow'
 
+const store = useWorkflowStore()
 const props = defineProps<{
   node: NodeDefinition | null
   edge: EdgeDefinition | null
@@ -16,18 +18,90 @@ const emit = defineEmits<{
 }>()
 
 const form = ref<any>({})
+let saveTimer: ReturnType<typeof setTimeout> | null = null
 
+onMounted(() => {
+  if (store.handlers.length === 0) {
+    store.fetchHandlers()
+  }
+})
+
+function scheduleSave(fn: () => void) {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(fn, 300)
+}
+
+// 同步节点到表单
 watch(() => props.node, (n) => {
-  if (n) form.value = { ...n, position: { ...n.position }, config: { ...n.config } }
+  if (!n) return
+  form.value = {
+    id: n.id,
+    label: n.label,
+    type: n.type,
+    handler: n.handler,
+    position: { x: n.position.x, y: n.position.y },
+    config: JSON.parse(JSON.stringify(n.config)),
+  }
 }, { immediate: true, deep: true })
 
+// 同步边到表单
 watch(() => props.edge, (e) => {
-  if (e) form.value = { ...e, condition: e.condition ? { ...e.condition } : { field: '', operator: '==', value: '' } }
+  if (!e) return
+  form.value = {
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    type: e.type,
+    condition: e.condition
+      ? { field: e.condition.field, operator: e.condition.operator, value: e.condition.value }
+      : { field: '', operator: '==', value: '' },
+  }
 }, { immediate: true, deep: true })
 
-function save() {
-  if (props.node) emit('updateNode', form.value)
-  if (props.edge) emit('updateEdge', form.value)
+// 自动保存：节点字段变化
+watch(() => form.value.label, () => saveNode())
+watch(() => form.value.type, () => saveNode())
+watch(() => form.value.handler, () => saveNode())
+watch(() => form.value.position, () => saveNode(), { deep: true })
+watch(() => form.value.config, () => saveNode(), { deep: true })
+
+// 自动保存：边字段变化
+watch(() => form.value.type, () => saveEdge())
+watch(() => form.value.condition?.field, () => saveEdge())
+watch(() => form.value.condition?.operator, () => saveEdge())
+watch(() => form.value.condition?.value, () => saveEdge())
+
+function saveNode() {
+  const n = props.node
+  if (!n || !form.value.id) return
+  scheduleSave(() => {
+    emit('updateNode', {
+      id: form.value.id,
+      label: form.value.label ?? n.label,
+      type: form.value.type ?? n.type,
+      handler: form.value.handler ?? n.handler,
+      position: { x: form.value.position?.x ?? n.position.x, y: form.value.position?.y ?? n.position.y },
+      config: form.value.config ?? n.config ?? {},
+    })
+  })
+}
+
+function saveEdge() {
+  const e = props.edge
+  if (!e || !form.value.id) return
+  scheduleSave(() => {
+    emit('updateEdge', {
+      id: form.value.id,
+      source: form.value.source ?? e.source,
+      target: form.value.target ?? e.target,
+      type: form.value.type ?? e.type,
+      condition: form.value.type === 'conditional' ? form.value.condition : e.condition,
+    })
+  })
+}
+
+function isKnownHandler(handler: string): boolean {
+  return store.handlers.some((h) => h.id === handler)
 }
 
 function remove() {
@@ -67,8 +141,23 @@ function remove() {
         </select>
       </div>
       <div>
-        <label class="block text-xs text-zinc-500 mb-1">Handler 标识</label>
-        <input v-model="form.handler" class="w-full rounded bg-white border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 font-mono focus:border-accent-cyan outline-none" />
+        <label class="block text-xs text-zinc-500 mb-1">Handler 处理器</label>
+        <div class="relative">
+          <select
+            v-model="form.handler"
+            class="w-full rounded bg-white border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 font-mono focus:border-accent-cyan outline-none appearance-none pr-8"
+          >
+            <option value="">-- 空（透传） --</option>
+            <option v-for="h in store.handlers" :key="h.id" :value="h.id">{{ h.id }}</option>
+          </select>
+          <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" :size="14" />
+        </div>
+        <p v-if="form.handler && !isKnownHandler(form.handler)" class="mt-1 text-xs text-amber-500">
+          未知处理器，将使用透传处理
+        </p>
+        <p v-else-if="form.handler" class="mt-1 text-xs text-emerald-600">
+          已注册处理器
+        </p>
       </div>
       <div>
         <label class="block text-xs text-zinc-500 mb-1">坐标 (X, Y)</label>
@@ -88,8 +177,7 @@ function remove() {
       </div>
 
       <div class="flex gap-2 pt-2">
-        <button @click="save" class="flex-1 rounded bg-accent-cyan/20 border border-accent-cyan/40 px-3 py-1.5 text-sm text-accent-cyan hover:bg-accent-cyan/30 transition">保存</button>
-        <button @click="remove" class="rounded border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red hover:bg-accent-red/20 transition">删除</button>
+        <button @click="remove" class="w-full rounded border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red hover:bg-accent-red/20 transition">删除节点</button>
       </div>
     </div>
 
@@ -129,8 +217,7 @@ function remove() {
       </div>
 
       <div class="flex gap-2 pt-2">
-        <button @click="save" class="flex-1 rounded bg-accent-cyan/20 border border-accent-cyan/40 px-3 py-1.5 text-sm text-accent-cyan hover:bg-accent-cyan/30 transition">保存</button>
-        <button @click="remove" class="rounded border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red hover:bg-accent-red/20 transition">删除</button>
+        <button @click="remove" class="w-full rounded border border-accent-red/40 px-3 py-1.5 text-sm text-accent-red hover:bg-accent-red/20 transition">删除边</button>
       </div>
     </div>
   </div>

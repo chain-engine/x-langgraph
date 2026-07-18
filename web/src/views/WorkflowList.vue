@@ -34,11 +34,11 @@ function createWorkflow() {
     description: newDesc.value,
     state_schema: { input: 'str', output: 'str', error: 'Optional[str]' },
     graph_data: { nodes: [], edges: [], entry_point: '' },
-  }).then(() => {
+  }).then((wf) => {
     showNew.value = false
     newName.value = ''
     newDesc.value = ''
-    openEditor(name)
+    router.push({ path: `/editor/${name}`, state: { workflow: wf } })
   })
 }
 

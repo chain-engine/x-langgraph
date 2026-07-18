@@ -33,7 +33,7 @@ INTENT_SYSTEM_PROMPT = """你是一个智能客服意图分类器。根据用户
 请仔细分析用户输入的语义，选择最准确的意图。"""
 
 
-def classify_intent(state: IntentClassifierState) -> dict:
+def classify_intent_node(state: IntentClassifierState) -> dict:
     """
     意图分类节点：根据用户输入判断意图
 
@@ -70,8 +70,8 @@ def classify_intent(state: IntentClassifierState) -> dict:
 
 # ========== 业务处理节点 ==========
 
-def handle_product_inquiry(state: IntentClassifierState) -> dict:
-    """处理产品咨询"""
+def handle_product_inquiry_node(state: IntentClassifierState) -> dict:
+    """产品咨询处理节点"""
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
@@ -85,8 +85,8 @@ def handle_product_inquiry(state: IntentClassifierState) -> dict:
     }
 
 
-def handle_order_status(state: IntentClassifierState) -> dict:
-    """处理订单状态查询"""
+def handle_order_status_node(state: IntentClassifierState) -> dict:
+    """订单状态查询处理节点"""
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
@@ -98,8 +98,8 @@ def handle_order_status(state: IntentClassifierState) -> dict:
     }
 
 
-def handle_technical_support(state: IntentClassifierState) -> dict:
-    """处理技术支持（需要人工审批）"""
+def handle_technical_support_node(state: IntentClassifierState) -> dict:
+    """技术支持处理节点（需要人工审批）"""
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     state_approved = state.get("approved")
@@ -144,8 +144,8 @@ def handle_technical_support(state: IntentClassifierState) -> dict:
     }
 
 
-def handle_complaint(state: IntentClassifierState) -> dict:
-    """处理投诉"""
+def handle_complaint_node(state: IntentClassifierState) -> dict:
+    """投诉处理节点"""
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
@@ -158,8 +158,8 @@ def handle_complaint(state: IntentClassifierState) -> dict:
     }
 
 
-def handle_billing(state: IntentClassifierState) -> dict:
-    """处理账单问题"""
+def handle_billing_node(state: IntentClassifierState) -> dict:
+    """账单问题处理节点"""
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
@@ -173,8 +173,8 @@ def handle_billing(state: IntentClassifierState) -> dict:
     }
 
 
-def handle_other(state: IntentClassifierState) -> dict:
-    """处理其他/闲聊"""
+def handle_other_node(state: IntentClassifierState) -> dict:
+    """其他/闲聊处理节点"""
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {

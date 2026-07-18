@@ -16,13 +16,13 @@ from langgraph.checkpoint.memory import MemorySaver
 from workflows.base import BaseWorkflow
 from workflows.intent_classifier.state import IntentClassifierState
 from workflows.intent_classifier.nodes import (
-    classify_intent,
-    handle_product_inquiry,
-    handle_order_status,
-    handle_technical_support,
-    handle_complaint,
-    handle_billing,
-    handle_other,
+    classify_intent_node,
+    handle_product_inquiry_node,
+    handle_order_status_node,
+    handle_technical_support_node,
+    handle_complaint_node,
+    handle_billing_node,
+    handle_other_node,
 )
 
 from core.logger import logger
@@ -56,13 +56,13 @@ class IntentClassifierWorkflow(BaseWorkflow):
         workflow = StateGraph(IntentClassifierState)
 
         # 节点
-        workflow.add_node("classify", classify_intent)
-        workflow.add_node("product_inquiry", handle_product_inquiry)
-        workflow.add_node("order_status", handle_order_status)
-        workflow.add_node("technical_support", handle_technical_support)
-        workflow.add_node("complaint", handle_complaint)
-        workflow.add_node("billing", handle_billing)
-        workflow.add_node("other", handle_other)
+        workflow.add_node("classify", classify_intent_node)
+        workflow.add_node("product_inquiry", handle_product_inquiry_node)
+        workflow.add_node("order_status", handle_order_status_node)
+        workflow.add_node("technical_support", handle_technical_support_node)
+        workflow.add_node("complaint", handle_complaint_node)
+        workflow.add_node("billing", handle_billing_node)
+        workflow.add_node("other", handle_other_node)
 
         # 入口
         workflow.set_entry_point("classify")

@@ -33,6 +33,18 @@ async def list_workflows() -> list[WorkflowSummary]:
     return [WorkflowSummary(**s) for s in summaries]
 
 
+@router.get("/handlers", tags=["workflows"])
+async def list_handlers() -> dict:
+    """列出所有可用的 handler 处理器"""
+    from workflows.compiler import HANDLER_REGISTRY
+    return {
+        "handlers": [
+            {"id": handler_id, "name": handler_id.replace("_", " ").title()}
+            for handler_id in HANDLER_REGISTRY
+        ]
+    }
+
+
 @router.get("/{name}", response_model=WorkflowDefinition)
 async def get_workflow(name: str) -> WorkflowDefinition:
     """获取工作流详情"""

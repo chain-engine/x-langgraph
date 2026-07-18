@@ -19,33 +19,99 @@ HANDLER_REGISTRY: dict[str, Callable] = {}
 def _register_handlers():
     """注册内置 handler"""
     from workflows.intent_classifier.nodes import (
-        classify_intent,
-        handle_product_inquiry,
-        handle_order_status,
-        handle_technical_support,
-        handle_complaint,
-        handle_billing,
-        handle_other,
+        classify_intent_node,
+        handle_product_inquiry_node,
+        handle_order_status_node,
+        handle_technical_support_node,
+        handle_complaint_node,
+        handle_billing_node,
+        handle_other_node,
     )
     from workflows.approval.nodes import (
-        submit_node, evaluate_node, human_approval_node, auto_approve_node, notify_node,
+        submit_node,
+        evaluate_node,
+        human_approval_node,
+        auto_approve_node,
+        notify_node,
+    )
+    from workflows.rag_qa.nodes import (
+        init_node,
+        retrieve_node,
+        build_context_node,
+        generate_node,
+        clarify_node,
+        should_retrieve,
+        should_generate,
+    )
+    from workflows.customer_service.nodes import (
+        intake_node,
+        classify_node,
+        handle_inquiry_node,
+        handle_complaint_node,
+        handle_technical_node,
+        handle_billing_node,
+        review_node,
+    )
+    from workflows.multi_agent.nodes import (
+        coordinator_node,
+        researcher_node,
+        writer_node,
+        editor_node,
+        reviewer_node,
+        route_to_agent_node,
+        should_continue_node,
+        route_for_parallel_node,
     )
 
     HANDLER_REGISTRY.update({
-        "classify": classify_intent,
-        "product_inquiry": handle_product_inquiry,
-        "order_status": handle_order_status,
-        "technical_support": handle_technical_support,
-        "complaint": handle_complaint,
-        "billing": handle_billing,
-        "other": handle_other,
+        # intent_classifier
+        "classify_intent_node": classify_intent_node,
+        "handle_product_inquiry_node": handle_product_inquiry_node,
+        "handle_order_status_node": handle_order_status_node,
+        "handle_technical_support_node": handle_technical_support_node,
+        "handle_complaint_node": handle_complaint_node,
+        "handle_billing_node": handle_billing_node,
+        "handle_other_node": handle_other_node,
 
-        "submit": submit_node,
-        "evaluate": evaluate_node,
-        "human_approval": human_approval_node,
-        "auto_approve": auto_approve_node,
-        "notify": notify_node,
+        # approval
+        "submit_node": submit_node,
+        "evaluate_node": evaluate_node,
+        "human_approval_node": human_approval_node,
+        "auto_approve_node": auto_approve_node,
+        "notify_node": notify_node,
+
+        # rag_qa
+        "init_node": init_node,
+        "retrieve_node": retrieve_node,
+        "build_context_node": build_context_node,
+        "generate_node": generate_node,
+        "clarify_node": clarify_node,
+        "should_retrieve_node": should_retrieve,
+        "should_generate_node": should_generate,
+
+        # customer_service
+        "intake_node": intake_node,
+        "classify_node": classify_node,
+        "handle_inquiry_node": handle_inquiry_node,
+        "handle_complaint_node": handle_complaint_node,
+        "handle_technical_node": handle_technical_node,
+        "handle_billing_node": handle_billing_node,
+        "review_node": review_node,
+
+        # multi_agent (excluding route_with_handoff)
+        "coordinator_node": coordinator_node,
+        "researcher_node": researcher_node,
+        "writer_node": writer_node,
+        "editor_node": editor_node,
+        "reviewer_node": reviewer_node,
+        "route_to_agent_node": route_to_agent_node,
+        "should_continue_node": should_continue_node,
+        "route_for_parallel_node": route_for_parallel_node,
     })
+
+
+# 模块加载时自动注册所有内置 handler
+_register_handlers()
 
 
 def _get_state_class(state_schema: dict[str, str]):

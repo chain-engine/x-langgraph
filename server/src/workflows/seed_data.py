@@ -5,6 +5,8 @@
 从内置 Python 工作流提取结构定义，用于初始化可视化编辑器。
 """
 
+# ========== 意图分类路由工作流 ==========
+
 INTENT_CLASSIFIER_DEF = {
     "name": "意图分类路由工作流",
     "description": "意图分类路由工作流：根据用户输入自动识别意图（产品咨询/订单状态/技术支持/投诉/账单）并分发处理",
@@ -25,7 +27,7 @@ INTENT_CLASSIFIER_DEF = {
                 "type": "router",
                 "label": "意图分类",
                 "position": {"x": 400, "y": 50},
-                "handler": "classify",
+                "handler": "classify_intent_node",
                 "config": {
                     "routing_mode": "llm_or_rule",
                     "description": "LLM 意图分类 + 规则降级",
@@ -36,7 +38,7 @@ INTENT_CLASSIFIER_DEF = {
                 "type": "processor",
                 "label": "产品咨询",
                 "position": {"x": 100, "y": 280},
-                "handler": "product_inquiry",
+                "handler": "handle_product_inquiry_node",
                 "config": {"description": "处理产品咨询"},
             },
             {
@@ -44,7 +46,7 @@ INTENT_CLASSIFIER_DEF = {
                 "type": "processor",
                 "label": "订单状态",
                 "position": {"x": 260, "y": 280},
-                "handler": "order_status",
+                "handler": "handle_order_status_node",
                 "config": {"description": "处理订单状态查询"},
             },
             {
@@ -52,7 +54,7 @@ INTENT_CLASSIFIER_DEF = {
                 "type": "processor",
                 "label": "技术支持",
                 "position": {"x": 420, "y": 280},
-                "handler": "technical_support",
+                "handler": "handle_technical_support_node",
                 "config": {"description": "处理技术支持（可能需要人工审批）"},
             },
             {
@@ -60,7 +62,7 @@ INTENT_CLASSIFIER_DEF = {
                 "type": "processor",
                 "label": "投诉处理",
                 "position": {"x": 580, "y": 280},
-                "handler": "complaint",
+                "handler": "handle_complaint_node",
                 "config": {"description": "处理投诉和反馈"},
             },
             {
@@ -68,7 +70,7 @@ INTENT_CLASSIFIER_DEF = {
                 "type": "processor",
                 "label": "账单问题",
                 "position": {"x": 740, "y": 280},
-                "handler": "billing",
+                "handler": "handle_billing_node",
                 "config": {"description": "处理账单和发票问题"},
             },
             {
@@ -76,7 +78,7 @@ INTENT_CLASSIFIER_DEF = {
                 "type": "processor",
                 "label": "其他",
                 "position": {"x": 900, "y": 280},
-                "handler": "other",
+                "handler": "handle_other_node",
                 "config": {"description": "处理闲聊或其他无法归类的问题"},
             },
         ],
@@ -133,6 +135,8 @@ INTENT_CLASSIFIER_DEF = {
     },
 }
 
+# ========== 自动化审批工作流 ==========
+
 APPROVAL_DEF = {
     "name": "自动化审批工作流",
     "description": "自动化审批工作流：支持自动审批和人工审批（Human-in-the-Loop）",
@@ -161,7 +165,7 @@ APPROVAL_DEF = {
                 "type": "processor",
                 "label": "提交申请",
                 "position": {"x": 400, "y": 50},
-                "handler": "submit",
+                "handler": "submit_node",
                 "config": {"description": "验证请求并生成请求 ID"},
             },
             {
@@ -169,7 +173,7 @@ APPROVAL_DEF = {
                 "type": "processor",
                 "label": "自动评估",
                 "position": {"x": 400, "y": 200},
-                "handler": "evaluate",
+                "handler": "evaluate_node",
                 "config": {"description": "基于规则评估风险等级和推荐动作"},
             },
             {
@@ -177,7 +181,7 @@ APPROVAL_DEF = {
                 "type": "processor",
                 "label": "自动审批",
                 "position": {"x": 200, "y": 350},
-                "handler": "auto_approve",
+                "handler": "auto_approve_node",
                 "config": {"description": "低风险请求自动通过"},
             },
             {
@@ -185,7 +189,7 @@ APPROVAL_DEF = {
                 "type": "router",
                 "label": "人工审批",
                 "position": {"x": 600, "y": 350},
-                "handler": "human_approval",
+                "handler": "human_approval_node",
                 "config": {"description": "中高风险请求等待人工审批（Human-in-the-Loop）"},
             },
             {
@@ -193,7 +197,7 @@ APPROVAL_DEF = {
                 "type": "processor",
                 "label": "发送通知",
                 "position": {"x": 400, "y": 500},
-                "handler": "notify",
+                "handler": "notify_node",
                 "config": {"description": "发送审批结果通知"},
             },
         ],
@@ -229,6 +233,417 @@ APPROVAL_DEF = {
                 "condition": {"field": "final_status", "operator": "not_in", "value": "approved,rejected"},
             },
             {"id": "e-notify-end", "source": "notify", "target": "__end__", "type": "normal"},
+        ],
+    },
+}
+
+# ========== RAG 文档问答工作流 ==========
+
+RAG_QA_DEF = {
+    "name": "RAG 文档问答工作流",
+    "description": "RAG 文档问答工作流：向量检索 + 上下文构建 + LLM 生成回答，支持澄清和降级处理",
+    "state_schema": {
+        "messages": "list",
+        "question": "str",
+        "retrieved_docs": "list",
+        "retrieval_score": "Optional[float]",
+        "context": "str",
+        "answer": "str",
+        "sources": "list",
+        "stage": "str",
+        "needs_clarification": "bool",
+        "clarification_question": "Optional[str]",
+        "error": "Optional[str]",
+    },
+    "graph_data": {
+        "entry_point": "init",
+        "nodes": [
+            {
+                "id": "init",
+                "type": "processor",
+                "label": "初始化",
+                "position": {"x": 400, "y": 50},
+                "handler": "init_node",
+                "config": {"description": "解析用户问题，设置初始状态"},
+            },
+            {
+                "id": "clarify",
+                "type": "processor",
+                "label": "澄清问题",
+                "position": {"x": 600, "y": 200},
+                "handler": "clarify_node",
+                "config": {"description": "问题不明确时生成澄清问题"},
+            },
+            {
+                "id": "retrieve",
+                "type": "processor",
+                "label": "文档检索",
+                "position": {"x": 200, "y": 200},
+                "handler": "retrieve_node",
+                "config": {"description": "从向量数据库检索相关文档"},
+            },
+            {
+                "id": "build_context",
+                "type": "processor",
+                "label": "构建上下文",
+                "position": {"x": 200, "y": 350},
+                "handler": "build_context_node",
+                "config": {"description": "将检索到的文档构建为上下文字符串"},
+            },
+            {
+                "id": "generate",
+                "type": "processor",
+                "label": "生成回答",
+                "position": {"x": 400, "y": 500},
+                "handler": "generate_node",
+                "config": {"description": "使用 LLM 基于上下文生成回答"},
+            },
+        ],
+        "edges": [
+            {
+                "id": "e-init-clarify",
+                "source": "init",
+                "target": "clarify",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "clarify"},
+            },
+            {
+                "id": "e-init-retrieve",
+                "source": "init",
+                "target": "retrieve",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "retrieve"},
+            },
+            {
+                "id": "e-retrieve-build",
+                "source": "retrieve",
+                "target": "build_context",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "build_context"},
+            },
+            {
+                "id": "e-retrieve-generate",
+                "source": "retrieve",
+                "target": "generate",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "generate"},
+            },
+            {"id": "e-build-generate", "source": "build_context", "target": "generate", "type": "normal"},
+            {"id": "e-clarify-end", "source": "clarify", "target": "__end__", "type": "normal"},
+            {"id": "e-generate-end", "source": "generate", "target": "__end__", "type": "normal"},
+        ],
+    },
+}
+
+# ========== 智能客服工作流 ==========
+
+CUSTOMER_SERVICE_DEF = {
+    "name": "智能客服工作流",
+    "description": "智能客服工作流：处理咨询、投诉、技术支持和账单问题，支持人工审批",
+    "state_schema": {
+        "messages": "list",
+        "stage": "str",
+        "ticket_id": "Optional[str]",
+        "ticket_type": "Optional[str]",
+        "priority": "Optional[str]",
+        "customer_name": "Optional[str]",
+        "resolution": "Optional[str]",
+        "requires_approval": "bool",
+        "approved": "Optional[bool]",
+        "approval_comments": "Optional[str]",
+        "error": "Optional[str]",
+    },
+    "graph_data": {
+        "entry_point": "intake",
+        "nodes": [
+            {
+                "id": "intake",
+                "type": "processor",
+                "label": "工单接收",
+                "position": {"x": 400, "y": 50},
+                "handler": "intake_node",
+                "config": {"description": "提取客户信息，生成工单 ID"},
+            },
+            {
+                "id": "classify",
+                "type": "router",
+                "label": "工单分类",
+                "position": {"x": 400, "y": 200},
+                "handler": "classify_node",
+                "config": {"description": "根据内容分类工单类型和优先级"},
+            },
+            {
+                "id": "handle_inquiry",
+                "type": "processor",
+                "label": "处理咨询",
+                "position": {"x": 100, "y": 350},
+                "handler": "handle_inquiry_node",
+                "config": {"description": "处理一般咨询类工单"},
+            },
+            {
+                "id": "handle_complaint",
+                "type": "processor",
+                "label": "处理投诉",
+                "position": {"x": 250, "y": 350},
+                "handler": "handle_complaint_node",
+                "config": {"description": "处理投诉和反馈类工单"},
+            },
+            {
+                "id": "handle_technical",
+                "type": "processor",
+                "label": "处理技术问题",
+                "position": {"x": 400, "y": 350},
+                "handler": "handle_technical_node",
+                "config": {"description": "处理技术问题（支持人工审批 interrupt）"},
+            },
+            {
+                "id": "handle_billing",
+                "type": "processor",
+                "label": "处理账单",
+                "position": {"x": 550, "y": 350},
+                "handler": "handle_billing_node",
+                "config": {"description": "处理账单和发票类工单"},
+            },
+            {
+                "id": "review",
+                "type": "processor",
+                "label": "质量审核",
+                "position": {"x": 400, "y": 500},
+                "handler": "review_node",
+                "config": {"description": "检查处理结果是否完整"},
+            },
+        ],
+        "edges": [
+            {"id": "e-intake-classify", "source": "intake", "target": "classify", "type": "normal"},
+            {
+                "id": "e-classify-inquiry",
+                "source": "classify",
+                "target": "handle_inquiry",
+                "type": "conditional",
+                "condition": {"field": "ticket_type", "operator": "==", "value": "inquiry"},
+            },
+            {
+                "id": "e-classify-complaint",
+                "source": "classify",
+                "target": "handle_complaint",
+                "type": "conditional",
+                "condition": {"field": "ticket_type", "operator": "==", "value": "complaint"},
+            },
+            {
+                "id": "e-classify-technical",
+                "source": "classify",
+                "target": "handle_technical",
+                "type": "conditional",
+                "condition": {"field": "ticket_type", "operator": "==", "value": "technical"},
+            },
+            {
+                "id": "e-classify-billing",
+                "source": "classify",
+                "target": "handle_billing",
+                "type": "conditional",
+                "condition": {"field": "ticket_type", "operator": "==", "value": "billing"},
+            },
+            {"id": "e-inquiry-review", "source": "handle_inquiry", "target": "review", "type": "normal"},
+            {"id": "e-complaint-review", "source": "handle_complaint", "target": "review", "type": "normal"},
+            {"id": "e-technical-review", "source": "handle_technical", "target": "review", "type": "normal"},
+            {"id": "e-billing-review", "source": "handle_billing", "target": "review", "type": "normal"},
+            {"id": "e-review-end", "source": "review", "target": "__end__", "type": "normal"},
+        ],
+    },
+}
+
+# ========== 多智能体协作工作流 ==========
+
+MULTI_AGENT_DEF = {
+    "name": "多智能体协作工作流",
+    "description": "多智能体协作工作流：协调者分解任务，研究员收集信息，撰写者生成内容，编辑优化，审核员审核质量（最多 3 轮迭代）",
+    "state_schema": {
+        "messages": "list",
+        "original_request": "str",
+        "thread_id": "str",
+        "tasks": "list",
+        "completed_tasks": "list",
+        "current_task_id": "Optional[str]",
+        "research_findings": "str",
+        "draft_content": "str",
+        "edited_content": "str",
+        "review_feedback": "str",
+        "final_output": "str",
+        "current_stage": "str",
+        "current_agent": "Optional[str]",
+        "iteration_count": "int",
+        "max_iterations": "int",
+        "needs_revision": "bool",
+        "revision_requests": "list",
+        "handoffs": "list",
+        "pending_handoff": "Optional[dict]",
+        "error": "Optional[str]",
+        "failed_agents": "list",
+    },
+    "graph_data": {
+        "entry_point": "coordinator",
+        "nodes": [
+            {
+                "id": "coordinator",
+                "type": "router",
+                "label": "协调者",
+                "position": {"x": 400, "y": 50},
+                "handler": "coordinator_node",
+                "config": {"description": "分析用户请求，使用 LLM 动态分解为子任务"},
+            },
+            {
+                "id": "researcher",
+                "type": "processor",
+                "label": "研究员",
+                "position": {"x": 100, "y": 200},
+                "handler": "researcher_node",
+                "config": {"description": "收集信息，分析数据，提供研究发现"},
+            },
+            {
+                "id": "writer",
+                "type": "processor",
+                "label": "撰写者",
+                "position": {"x": 250, "y": 200},
+                "handler": "writer_node",
+                "config": {"description": "基于研究结果撰写内容"},
+            },
+            {
+                "id": "editor",
+                "type": "processor",
+                "label": "编辑",
+                "position": {"x": 400, "y": 200},
+                "handler": "editor_node",
+                "config": {"description": "优化内容结构和语言表达"},
+            },
+            {
+                "id": "reviewer",
+                "type": "router",
+                "label": "审核员",
+                "position": {"x": 550, "y": 200},
+                "handler": "reviewer_node",
+                "config": {"description": "质量检查，决定是否需要修订（最多 3 轮）"},
+            },
+        ],
+        "edges": [
+            # coordinator 路由到各 agent
+            {
+                "id": "e-coord-researcher",
+                "source": "coordinator",
+                "target": "researcher",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "researcher"},
+            },
+            {
+                "id": "e-coord-writer",
+                "source": "coordinator",
+                "target": "writer",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "writer"},
+            },
+            {
+                "id": "e-coord-editor",
+                "source": "coordinator",
+                "target": "editor",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "editor"},
+            },
+            {
+                "id": "e-coord-reviewer",
+                "source": "coordinator",
+                "target": "reviewer",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "reviewer"},
+            },
+            {
+                "id": "e-coord-complete",
+                "source": "coordinator",
+                "target": "__end__",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "complete"},
+            },
+            # researcher 路由
+            {
+                "id": "e-researcher-researcher",
+                "source": "researcher",
+                "target": "researcher",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "researcher"},
+            },
+            {
+                "id": "e-researcher-writer",
+                "source": "researcher",
+                "target": "writer",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "writer"},
+            },
+            {
+                "id": "e-researcher-editor",
+                "source": "researcher",
+                "target": "editor",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "editor"},
+            },
+            {
+                "id": "e-researcher-reviewer",
+                "source": "researcher",
+                "target": "reviewer",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "reviewer"},
+            },
+            {
+                "id": "e-researcher-complete",
+                "source": "researcher",
+                "target": "__end__",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "complete"},
+            },
+            # writer 路由
+            {
+                "id": "e-writer-researcher",
+                "source": "writer",
+                "target": "researcher",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "researcher"},
+            },
+            {
+                "id": "e-writer-writer",
+                "source": "writer",
+                "target": "writer",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "writer"},
+            },
+            {
+                "id": "e-writer-editor",
+                "source": "writer",
+                "target": "editor",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "editor"},
+            },
+            {
+                "id": "e-writer-reviewer",
+                "source": "writer",
+                "target": "reviewer",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "reviewer"},
+            },
+            {
+                "id": "e-writer-complete",
+                "source": "writer",
+                "target": "__end__",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "complete"},
+            },
+            # editor → reviewer
+            {"id": "e-editor-reviewer", "source": "editor", "target": "reviewer", "type": "normal"},
+            # reviewer 迭代判断
+            {
+                "id": "e-reviewer-editor",
+                "source": "reviewer",
+                "target": "editor",
+                "type": "conditional",
+                "condition": {"field": "route", "operator": "==", "value": "continue"},
+            },
+            {"id": "e-reviewer-end", "source": "reviewer", "target": "__end__", "type": "conditional", "condition": {"field": "route", "operator": "==", "value": "complete"}},
         ],
     },
 }

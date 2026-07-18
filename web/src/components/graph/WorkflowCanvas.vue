@@ -18,13 +18,27 @@ const emit = defineEmits<{
   save: []
   selectNode: [node: NodeDefinition | null]
   selectEdge: [edge: EdgeDefinition | null]
+  nodeDrop: [nodeType: string, position: { x: number; y: number }]
+  edgeConnect: [connection: Connection]
 }>()
 
 const execution = useExecutionStore()
 const { onConnect, addEdges, applyNodeChanges, applyEdgeChanges } = useVueFlow()
 
+const vueFlowRef = ref<HTMLElement | null>(null)
 const nodes = ref<Node[]>([])
 const edges = ref<Edge[]>([])
+
+function handleDrop(event: DragEvent) {
+  const nodeType = event.dataTransfer?.getData('application/x-workflow-node-type')
+  if (!nodeType) return
+  const bounds = vueFlowRef.value?.getBoundingClientRect()
+  if (!bounds) return
+  emit('nodeDrop', nodeType, {
+    x: event.clientX - bounds.left,
+    y: event.clientY - bounds.top,
+  })
+}
 
 const nodeTypes = { workflow: WorkflowNode }
 const edgeTypes = { workflow: WorkflowEdge }
@@ -102,7 +116,7 @@ onConnect((connection: Connection) => {
     type: 'workflow',
     data: { edgeType: 'normal' },
   }])
-  emit('save')
+  emit('edgeConnect', connection)
 })
 
 function onNodeClick({ node }: { node: Node }) {
@@ -113,6 +127,15 @@ function onNodeClick({ node }: { node: Node }) {
 function onEdgeClick({ edge }: { edge: Edge }) {
   const wfEdge = props.workflow?.graph_data.edges.find((e) => e.id === edge.id)
   emit('selectEdge', wfEdge || null)
+}
+
+function onNodeConnect(connection: Connection) {
+  addEdges([{
+    ...connection,
+    type: 'workflow',
+    data: { edgeType: 'normal' },
+  }])
+  emit('edgeConnect', connection)
 }
 
 function onNodesChange(changes: NodeChange[]) {
@@ -139,7 +162,7 @@ const minimapColor = (node: Node) => {
 </script>
 
 <template>
-  <div class="relative h-full w-full">
+  <div class="relative h-full w-full" ref="vueFlowRef" @dragover.prevent @drop="handleDrop">
     <VueFlow
       v-model:nodes="nodes"
       v-model:edges="edges"
@@ -152,6 +175,7 @@ const minimapColor = (node: Node) => {
       @edges-change="onEdgesChange"
       @node-click="onNodeClick"
       @edge-click="onEdgeClick"
+      @connect="onNodeConnect"
     >
       <Background :gap="20" :size="1" pattern-color="#1a1a24" />
       <Controls position="bottom-left" />

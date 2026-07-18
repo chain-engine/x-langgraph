@@ -166,11 +166,12 @@ class WorkflowDefinitionRepository:
                 session.add(instance)
                 await session.flush()
                 await session.refresh(instance)
-                return instance
+                return instance.id
 
-            result = await session_factory.transaction_async(create_func)
-            logger.info(f"Workflow definition created: {data['name']}")
-            return self._model_to_dict(result)
+            workflow_id = await session_factory.transaction_async(create_func)
+            logger.info(f"Workflow definition created: {data['name']} (id={workflow_id})")
+            # 从新 session 重新查询（带 eager load），避免 detached instance 问题
+            return await self.get_by_name(data["name"])
         except Exception as e:
             logger.error(f"Failed to create workflow definition: {e}")
             raise DatabaseError(message=str(e))
@@ -264,9 +265,10 @@ class WorkflowDefinitionRepository:
         """删除工作流定义"""
         try:
             async def delete_func(session):
-                instance = await session.execute(
+                result = await session.execute(
                     select(WorkflowDefinition).filter_by(name=name)
-                ).scalar_one_or_none()
+                )
+                instance = result.scalar_one_or_none()
                 if instance is None:
                     return False
                 await session.delete(instance)

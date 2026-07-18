@@ -847,9 +847,9 @@ def _update_task_status(
 # ===== 条件路由函数 =====
 
 
-def route_to_agent(state: MultiAgentState) -> str:
+def route_to_agent_node(state: MultiAgentState) -> str:
     """
-    条件路由：决定下一个执行的智能体
+    条件路由节点：决定下一个执行的智能体
 
     基于任务依赖关系和完成状态进行路由。
 
@@ -882,9 +882,9 @@ def route_to_agent(state: MultiAgentState) -> str:
     return "complete"
 
 
-def should_continue(state: MultiAgentState) -> str:
+def should_continue_node(state: MultiAgentState) -> str:
     """
-    条件路由：判断是否继续迭代
+    条件路由节点：判断是否继续迭代
 
     Args:
         state: 当前状态
@@ -904,9 +904,9 @@ def should_continue(state: MultiAgentState) -> str:
 
 # ===== 预留：并行执行路由 =====
 
-def route_for_parallel(state: MultiAgentState) -> list[dict]:
+def route_for_parallel_node(state: MultiAgentState) -> list[dict]:
     """
-    条件路由：返回可并行执行的任务列表（预留）
+    条件路由节点：返回可并行执行的任务列表（预留）
 
     用于 Team 模式下的并行任务分配。
 
@@ -954,7 +954,7 @@ def route_with_handoff(state: MultiAgentState) -> str:
         return pending_handoff.get("to_agent", "complete")
 
     # 否则使用默认路由
-    return route_to_agent(state)
+    return route_to_agent_node(state)
 
 
 def initiate_handoff(

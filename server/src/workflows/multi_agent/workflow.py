@@ -45,8 +45,8 @@ from workflows.multi_agent.nodes import (
     writer_node,
     editor_node,
     reviewer_node,
-    route_to_agent,
-    should_continue,
+    route_to_agent_node,
+    should_continue_node,
 )
 
 from core.logger import logger
@@ -112,7 +112,7 @@ class MultiAgentWorkflow(BaseWorkflow):
         # ===== 条件路由：协调者分配任务后路由到对应智能体 =====
         workflow.add_conditional_edges(
             "coordinator",
-            route_to_agent,
+            route_to_agent_node,
             {
                 "researcher": "researcher",
                 "writer": "writer",
@@ -125,7 +125,7 @@ class MultiAgentWorkflow(BaseWorkflow):
         # ===== 研究员完成后路由 =====
         workflow.add_conditional_edges(
             "researcher",
-            route_to_agent,
+            route_to_agent_node,
             {
                 "researcher": "researcher",
                 "writer": "writer",
@@ -138,7 +138,7 @@ class MultiAgentWorkflow(BaseWorkflow):
         # ===== 撰写者完成后路由 =====
         workflow.add_conditional_edges(
             "writer",
-            route_to_agent,
+            route_to_agent_node,
             {
                 "researcher": "researcher",
                 "writer": "writer",
@@ -154,7 +154,7 @@ class MultiAgentWorkflow(BaseWorkflow):
         # ===== 审核员完成后判断是否继续迭代 =====
         workflow.add_conditional_edges(
             "reviewer",
-            should_continue,
+            should_continue_node,
             {
                 "continue": "editor",  # 需要修订，回到编辑
                 "complete": END,  # 完成

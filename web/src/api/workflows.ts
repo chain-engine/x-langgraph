@@ -15,6 +15,8 @@ export const workflowApi = {
   update: (name: string, wf: WorkflowDefinition) => http.put<WorkflowDefinition>(`/workflows/${encodeURIComponent(name)}`, wf),
   delete: (name: string) => http.delete<{ deleted: boolean }>(`/workflows/${encodeURIComponent(name)}`),
 
+  listHandlers: () => http.get<{ handlers: Array<{ id: string; name: string }> }>('/workflows/handlers'),
+
   addNode: (name: string, node: NodeDefinition) =>
     http.post<WorkflowDefinition>(`/workflows/${encodeURIComponent(name)}/nodes`, node),
   updateNode: (name: string, nodeId: string, node: NodeDefinition) =>
