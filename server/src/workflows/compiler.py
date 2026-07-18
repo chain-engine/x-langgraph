@@ -129,9 +129,11 @@ def _get_state_class(state_schema: dict[str, str]):
         }.get(field_type, Any)
         if field_type.startswith("Optional"):
             py_type = Optional[py_type]
-        fields[field_name] = py_type
-    if "messages" not in fields:
-        fields["messages"] = Annotated[list, add_messages]
+        # messages 字段必须使用 add_messages reducer 来正确合并消息历史
+        if field_name == "messages":
+            fields[field_name] = Annotated[list, add_messages]
+        else:
+            fields[field_name] = py_type
     return TypedDict("DynamicState", fields)  # type: ignore
 
 

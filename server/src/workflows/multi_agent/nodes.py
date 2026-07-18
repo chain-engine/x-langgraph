@@ -366,6 +366,13 @@ def coordinator_node(state: MultiAgentState) -> dict:
 
         logger.info(f"Multi-Agent: 分解为 {len(tasks)} 个子任务")
 
+        # 确定下一步路由：使用第一个任务的 assigned_to
+        route_target = "complete"
+        if task_dicts:
+            first_task = task_dicts[0]
+            route_target = first_task.get("assigned_to", "complete")
+            logger.info(f"Multi-Agent: 首个任务分配给 {route_target}")
+
         return {
             "tasks": task_dicts,
             "current_stage": "coordinator",
@@ -373,16 +380,20 @@ def coordinator_node(state: MultiAgentState) -> dict:
             "iteration_count": 0,
             "completed_tasks": [],
             "handoffs": [],
+            "route": route_target,
         }
 
     except Exception as e:
         logger.error(f"Multi-Agent: 任务分解失败 - {e}")
         # 降级到默认分解
         tasks = _decompose_default(request)
+        task_dicts = [task.model_dump() for task in tasks]
+        route_target = task_dicts[0].get("assigned_to", "complete") if task_dicts else "complete"
         return {
-            "tasks": [task.model_dump() for task in tasks],
+            "tasks": task_dicts,
             "current_stage": "coordinator",
             "current_agent": AgentRole.COORDINATOR.value,
+            "route": route_target,
             "error": str(e),
         }
 
@@ -549,12 +560,16 @@ def researcher_node(state: MultiAgentState) -> dict:
 
         logger.info(f"Multi-Agent: 研究完成 - {len(findings)} 字符, 耗时 {duration}ms")
 
+        # 确定下一步路由：下一个未完成的任务
+        next_route = _get_next_route(state, AgentRole.RESEARCHER.value)
+
         return {
             "research_findings": findings,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
             "current_stage": "researcher",
             "current_agent": AgentRole.RESEARCHER.value,
+            "route": next_route,
         }
 
     except Exception as e:
@@ -562,6 +577,7 @@ def researcher_node(state: MultiAgentState) -> dict:
         return {
             "research_findings": f"研究失败: {str(e)}",
             "error": f"研究阶段错误: {str(e)}",
+            "route": "complete",
         }
 
 
@@ -612,12 +628,16 @@ def writer_node(state: MultiAgentState) -> dict:
 
         logger.info(f"Multi-Agent: 撰写完成 - {len(draft)} 字符, 耗时 {duration}ms")
 
+        # 确定下一步路由
+        next_route = _get_next_route(state, AgentRole.WRITER.value)
+
         return {
             "draft_content": draft,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
             "current_stage": "writer",
             "current_agent": AgentRole.WRITER.value,
+            "route": next_route,
         }
 
     except Exception as e:
@@ -625,6 +645,7 @@ def writer_node(state: MultiAgentState) -> dict:
         return {
             "draft_content": f"撰写失败: {str(e)}",
             "error": f"撰写阶段错误: {str(e)}",
+            "route": "complete",
         }
 
 
@@ -686,6 +707,7 @@ def editor_node(state: MultiAgentState) -> dict:
             "current_stage": "editor",
             "current_agent": AgentRole.EDITOR.value,
             "revision_requests": [],
+            "route": "reviewer",  # 编辑完成后总是进入审核
         }
 
     except Exception as e:
@@ -693,6 +715,7 @@ def editor_node(state: MultiAgentState) -> dict:
         return {
             "edited_content": draft,
             "error": f"编辑阶段错误: {str(e)}",
+            "route": "complete",
         }
 
 
@@ -760,6 +783,7 @@ def reviewer_node(state: MultiAgentState) -> dict:
             "revision_requests": revision_requests,
             "iteration_count": iteration_count + 1,
             "final_output": edited_content if not needs_revision else "",
+            "route": "editor" if needs_revision else "complete",
         }
 
     except Exception as e:
@@ -768,6 +792,7 @@ def reviewer_node(state: MultiAgentState) -> dict:
             "review_feedback": f"审核失败: {str(e)}",
             "error": f"审核阶段错误: {str(e)}",
             "final_output": edited_content,
+            "route": "complete",
         }
 
 
@@ -842,6 +867,33 @@ def _update_task_status(
                 break
 
     return tasks, completed_tasks
+
+
+def _get_next_route(state: MultiAgentState, completed_role: str) -> str:
+    """
+    根据已完成的任务确定下一个路由目标
+
+    Args:
+        state: 当前状态
+        completed_role: 已完成任务的角色
+
+    Returns:
+        下一个路由目标（agent 名称或 "complete"）
+    """
+    tasks = state.get("tasks", [])
+    completed_tasks = set(state.get("completed_tasks", []))
+    completed_tasks.add(completed_role)  # 假设当前角色会立即标记为完成
+
+    # 按顺序查找下一个未完成的任务
+    agent_order = ["researcher", "writer", "editor", "reviewer"]
+    for agent in agent_order:
+        if agent == completed_role:
+            continue
+        for task in tasks:
+            if task.get("assigned_to") == agent and task.get("id") not in completed_tasks:
+                return agent
+
+    return "complete"
 
 
 # ===== 条件路由函数 =====
