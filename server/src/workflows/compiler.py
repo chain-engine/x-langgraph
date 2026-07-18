@@ -18,7 +18,7 @@ HANDLER_REGISTRY: dict[str, Callable] = {}
 
 def _register_handlers():
     """注册内置 handler"""
-    from workflows.simple_router.nodes import (
+    from workflows.intent_classifier.nodes import (
         classify_intent,
         handle_product_inquiry,
         handle_order_status,

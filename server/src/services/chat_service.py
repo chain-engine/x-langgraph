@@ -52,7 +52,7 @@ class ChatService(Service):
         """
         message = data.get("message")
         session_id = data.get("session_id", "default")
-        workflow = data.get("workflow", "simple_router")
+        workflow = data.get("workflow", "intent_classifier")
 
         logger.info(f"Create chat: message={message[:50]}, session_id={session_id}, workflow={workflow}")
 
@@ -128,8 +128,8 @@ class ChatService(Service):
         """
         try:
             # 静态预定义工作流（硬编码路径）
-            if workflow_name == "simple_router":
-                from workflows.simple_router.workflow import IntentClassifierWorkflow
+            if workflow_name == "intent_classifier":
+                from workflows.intent_classifier.workflow import IntentClassifierWorkflow
 
                 result = await IntentClassifierWorkflow().arun(message, session_id)
             elif workflow_name == "customer_service":
@@ -156,10 +156,10 @@ class ChatService(Service):
                     result = await self._execute_dynamic_workflow(definition, message, session_id)
                 else:
                     # fallback：使用默认工作流
-                    logger.warning(f"Unknown workflow '{workflow_name}', falling back to simple_router")
-                    from workflows.simple_router.workflow import SimpleRouterWorkflow
+                    logger.warning(f"Unknown workflow '{workflow_name}', falling back to intent_classifier")
+                    from workflows.intent_classifier.workflow import IntentClassifierWorkflow
 
-                    result = await SimpleRouterWorkflow().arun(message, session_id)
+                    result = await IntentClassifierWorkflow().arun(message, session_id)
 
             return self._normalize_workflow_result(result)
         except ImportError as e:
@@ -219,8 +219,8 @@ class ChatService(Service):
                         yield event
                     return
 
-                # fallback 到 simple_router
-                from workflows.simple_router.workflow import IntentClassifierWorkflow
+                # fallback 到 intent_classifier
+                from workflows.intent_classifier.workflow import IntentClassifierWorkflow
 
                 workflow = IntentClassifierWorkflow()
                 event_source = workflow.astream(

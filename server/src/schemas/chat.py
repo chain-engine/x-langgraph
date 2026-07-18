@@ -13,7 +13,7 @@ class ChatRequest(BaseModel):
 
     message: str = Field(..., description="用户消息", min_length=1)
     session_id: str = Field(default="default", description="会话 ID")
-    workflow: str = Field(default="simple_router", description="工作流类型")
+    workflow: str = Field(default="intent_classifier", description="工作流类型")
 
 
 class ChatResponse(BaseModel):

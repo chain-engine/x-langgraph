@@ -118,7 +118,7 @@ x-langgraph/
 │   │   ├── schemas/                  # 数据模型层（Pydantic Schema）
 │   │   ├── llm/                      # LLM 提供者模块
 │   │   ├── tools/                    # 工具模块（weather, search, calculation）
-│   │   ├── workflows/                # 工作流模块（simple_router, approval, compiler）
+│   │   ├── workflows/                # 工作流模块（intent_classifier, approval, compiler）
 │   │   └── main.py                   # FastAPI 应用入口
 │   ├── examples/                     # 示例代码
 │   ├── tests/                        # 测试代码
@@ -443,7 +443,7 @@ npm run dev
 
 前端启动后：
 - 可视化界面: <http://localhost:5173>
-- 工作流编辑器: <http://localhost:5173/editor/simple_router>
+- 工作流编辑器: <http://localhost:5173/editor/intent_classifier>
 
 ### 常用命令
 
@@ -557,7 +557,7 @@ curl -X POST http://localhost:8000/chat \
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key-here" \
-  -d '{"message": "你们的产品多少钱？", "session_id": "test-123", "workflow": "simple_router"}'
+  -d '{"message": "你们的产品多少钱？", "session_id": "test-123", "workflow": "intent_classifier"}'
 
 # 流式聊天（SSE）
 curl -X POST http://localhost:8000/chat/stream \

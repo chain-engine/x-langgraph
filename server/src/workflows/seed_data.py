@@ -6,7 +6,7 @@
 """
 
 INTENT_CLASSIFIER_DEF = {
-    "name": "意图分类路由工作流",
+    "name": "intent_classifier",
     "description": "意图分类路由：根据用户输入自动识别意图（产品咨询/订单状态/技术支持/投诉/账单）并分发处理",
     "state_schema": {
         "messages": "list",

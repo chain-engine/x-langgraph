@@ -14,8 +14,8 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 
 from workflows.base import BaseWorkflow
-from workflows.simple_router.state import IntentClassifierState
-from workflows.simple_router.nodes import (
+from workflows.intent_classifier.state import IntentClassifierState
+from workflows.intent_classifier.nodes import (
     classify_intent,
     handle_product_inquiry,
     handle_order_status,
@@ -44,7 +44,7 @@ class IntentClassifierWorkflow(BaseWorkflow):
                                 └→ other → END
     """
 
-    name = "simple_router"
+    name = "intent_classifier"
     description = "意图分类路由：根据用户输入自动识别意图（产品咨询/订单状态/技术支持/投诉/账单）并分发处理"
 
     def __init__(self, checkpointer: BaseCheckpointSaver | None = None):
@@ -98,10 +98,3 @@ class IntentClassifierWorkflow(BaseWorkflow):
     @staticmethod
     def _route_by_intent(state: IntentClassifierState) -> str:
         return state.get("intent", "other")
-
-
-# ========== 向后兼容别名（保持 API 稳定）==========
-
-create_simple_router_workflow = IntentClassifierWorkflow
-run_simple_router = IntentClassifierWorkflow().invoke
-arun_simple_router = IntentClassifierWorkflow().ainvoke

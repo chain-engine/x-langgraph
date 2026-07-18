@@ -13,7 +13,7 @@ import re
 
 from langgraph.types import interrupt
 
-from workflows.simple_router.state import IntentClassifierState
+from workflows.intent_classifier.state import IntentClassifierState
 from core.config import settings
 from core.logger import logger
 
