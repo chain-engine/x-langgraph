@@ -7,14 +7,14 @@ API 路由管理
 
 from fastapi import APIRouter, Depends
 
-from api.routes import chat, approval, health, metrics, workflows
+from api.routes import chats, approval, health, metrics, workflows
 from core.security import verify_api_key, rate_limit
 
 
 api_router = APIRouter()
 
 api_router.include_router(
-    chat.router,
+    chats.router,
     dependencies=[Depends(verify_api_key), Depends(rate_limit)]
 )
 api_router.include_router(
