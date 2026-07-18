@@ -103,5 +103,5 @@ class IntentClassifierWorkflow(BaseWorkflow):
 # ========== 向后兼容别名（保持 API 稳定）==========
 
 create_simple_router_workflow = IntentClassifierWorkflow
-run_simple_router = IntentClassifierWorkflow().run
-arun_simple_router = IntentClassifierWorkflow().arun
+run_simple_router = IntentClassifierWorkflow().invoke
+arun_simple_router = IntentClassifierWorkflow().ainvoke
