@@ -73,21 +73,21 @@ tools/weather/
 
 ### 智能路由（LLM + 降级）
 
-Simple Router 支持 LLM 语义理解 + 规则降级：
+意图分类路由支持 LLM 语义理解 + 规则降级：
 
 ```python
-def router_node(state):
+def classify_intent(state):
     if settings.has_valid_api_key():
         try:
-            return _llm_routing(state["input"])  # LLM 理解语义
+            return _llm_classification(state["messages"])  # LLM 理解语义
         except Exception:
             pass
-    return _fallback_routing(state["input"])     # 规则降级
+    return _fallback_classification(state["messages"])     # 规则降级
 ```
 
 ## 核心特征
 
-- **多工作流支持**：内置 5 种典型工作流（简单路由、智能客服、RAG问答、多智能体协作、自动化审批）
+- **多工作流支持**：内置 5 种典型工作流（意图分类路由、智能客服、RAG问答、多智能体协作、自动化审批）
 - **状态持久化**：基于 MySQL 的 Checkpointer 实现，支持工作流中断与恢复，MySQL不可用时自动降级到 MemorySaver
 - **Human-in-the-Loop**：支持人工审批、中断恢复等交互式场景
 - **多 LLM 提供者**：支持 DeepSeek、豆包、阿里云等主流大模型
@@ -211,17 +211,19 @@ api → service → repository
 
 ### 核心功能业务流程图
 
-#### 1. 简单路由工作流 (Simple Router)
+#### 1. 意图分类路由工作流 (Intent Classifier)
 
 ```mermaid
 flowchart LR
-    START --> router --> route{"条件路由"}
-    route --> search --> END
-    route --> calculate --> END
-    route --> weather --> END
+    START --> classify --> route{"条件路由"}
+    route --> product_inquiry --> END
+    route --> order_status --> END
+    route --> technical_support --> END
+    route --> complaint --> END
+    route --> billing --> END
 ```
 
-**核心特性**: 条件边路由、工具调用、LLM 语义理解 + 规则降级
+**核心特性**: LLM 意图分类、规则降级、6 类业务分发、Human-in-the-Loop
 
 #### 2. 智能客服工作流 (Customer Service)
 
@@ -555,7 +557,7 @@ curl -X POST http://localhost:8000/chat \
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key-here" \
-  -d '{"message": "北京天气", "session_id": "test-123", "workflow": "simple_router"}'
+  -d '{"message": "你们的产品多少钱？", "session_id": "test-123", "workflow": "simple_router"}'
 
 # 流式聊天（SSE）
 curl -X POST http://localhost:8000/chat/stream \

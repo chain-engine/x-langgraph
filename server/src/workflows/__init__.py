@@ -5,16 +5,16 @@
 提供各类 LangGraph 工作流定义，展示状态管理、条件路由、人机交互等核心功能。
 
 工作流列表：
-- simple_router: 简单路由工作流（条件边路由）
+- simple_router: 意图分类路由工作流（LLM 分类 + 条件分发）
 - customer_service: 智能客服工作流（状态管理 + Checkpointer）
 - rag_qa: RAG 文档问答工作流（向量检索 + LLM 生成）
 - multi_agent: 多智能体协作工作流（任务分解 + 迭代优化）
 - approval: 自动化审批工作流（人机交互 + 条件路由）
 
 使用示例：
-    # 简单路由
+    # 意图分类路由
     from workflows.simple_router import run_simple_router
-    result = run_simple_router("搜索 Python 教程")
+    result = run_simple_router("你们的产品多少钱？")
 
     # RAG 问答
     from workflows.rag_qa import run_rag_qa
@@ -32,8 +32,9 @@
 # 基类
 from workflows.base import BaseWorkflow
 
-# 简单路由工作流
+# 意图分类路由工作流
 from workflows.simple_router import (
+    IntentClassifierWorkflow,
     create_simple_router_workflow,
     run_simple_router,
 )
@@ -79,7 +80,8 @@ from workflows.approval import (
 __all__ = [
     # 基类
     "BaseWorkflow",
-    # 简单路由
+    # 意图分类
+    "IntentClassifierWorkflow",
     "create_simple_router_workflow",
     "run_simple_router",
     # 智能客服

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-简单路由工作流定义
+意图分类路由工作流定义
 
-展示 LangGraph 的基本功能：
-- StateGraph 状态管理
-- 条件边路由
-- 多节点协作
+展示 LangGraph 的核心能力：
+- LLM 意图分类 + 条件路由
+- 多意图分支处理
+- 人机交互（interrupt）
 - 继承 BaseWorkflow 基类
 """
 
@@ -14,175 +14,94 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 
 from workflows.base import BaseWorkflow
-from workflows.simple_router.state import SimpleRouterState
+from workflows.simple_router.state import IntentClassifierState
 from workflows.simple_router.nodes import (
-    router_node,
-    search_node,
-    calculate_node,
-    weather_node,
-    unknown_node,
+    classify_intent,
+    handle_product_inquiry,
+    handle_order_status,
+    handle_technical_support,
+    handle_complaint,
+    handle_billing,
+    handle_other,
 )
 
 from core.logger import logger
 
 
-class SimpleRouterWorkflow(BaseWorkflow):
+class IntentClassifierWorkflow(BaseWorkflow):
     """
-    简单路由工作流
+    意图分类路由工作流
 
-    根据用户输入自动路由到不同的处理节点：
-    - search: 搜索信息
-    - calculate: 数学计算
-    - weather: 天气查询
-    - unknown: 未知请求
+    根据用户输入自动识别意图，并路由到对应的业务处理节点：
 
     工作流结构:
-        START → router → [条件路由]
-                          ├→ search → END
-                          ├→ calculate → END
-                          ├→ weather → END
-                          └→ unknown → END
+        START → classify → [条件路由]
+                                ├→ product_inquiry → END
+                                ├→ order_status → END
+                                ├→ technical_support → END (interrupt 等待审批)
+                                ├→ complaint → END
+                                ├→ billing → END
+                                └→ other → END
     """
 
     name = "simple_router"
-    description = "简单路由工作流：根据输入自动路由到搜索、计算或天气节点"
+    description = "意图分类路由：根据用户输入自动识别意图（产品咨询/订单状态/技术支持/投诉/账单）并分发处理"
 
     def __init__(self, checkpointer: BaseCheckpointSaver | None = None):
         super().__init__(checkpointer)
 
     def build(self) -> StateGraph:
-        """
-        构建工作流图
-
-        Returns:
-            编译后的 StateGraph
-        """
         logger.info(f"构建工作流: {self.name}")
 
-        # 创建状态图
-        workflow = StateGraph(SimpleRouterState)
+        workflow = StateGraph(IntentClassifierState)
 
-        # 添加节点
-        workflow.add_node("router", router_node)
-        workflow.add_node("search", search_node)
-        workflow.add_node("calculate", calculate_node)
-        workflow.add_node("weather", weather_node)
-        workflow.add_node("unknown", unknown_node)
+        # 节点
+        workflow.add_node("classify", classify_intent)
+        workflow.add_node("product_inquiry", handle_product_inquiry)
+        workflow.add_node("order_status", handle_order_status)
+        workflow.add_node("technical_support", handle_technical_support)
+        workflow.add_node("complaint", handle_complaint)
+        workflow.add_node("billing", handle_billing)
+        workflow.add_node("other", handle_other)
 
-        # 设置入口点
-        workflow.set_entry_point("router")
+        # 入口
+        workflow.set_entry_point("classify")
 
-        # 添加条件边
+        # 条件路由
         workflow.add_conditional_edges(
-            "router",
-            self._route_by_type,
+            "classify",
+            self._route_by_intent,
             {
-                "search": "search",
-                "calculate": "calculate",
-                "weather": "weather",
-                "unknown": "unknown",
+                "product_inquiry": "product_inquiry",
+                "order_status": "order_status",
+                "technical_support": "technical_support",
+                "complaint": "complaint",
+                "billing": "billing",
+                "other": "other",
             },
         )
 
-        # 添加结束边
-        workflow.add_edge("search", END)
-        workflow.add_edge("calculate", END)
-        workflow.add_edge("weather", END)
-        workflow.add_edge("unknown", END)
+        # 所有分支结束
+        for node in [
+            "product_inquiry",
+            "order_status",
+            "technical_support",
+            "complaint",
+            "billing",
+            "other",
+        ]:
+            workflow.add_edge(node, END)
 
-        # 编译工作流
         checkpointer = self.checkpointer or MemorySaver()
         return workflow.compile(checkpointer=checkpointer)
 
     @staticmethod
-    def _route_by_type(state: SimpleRouterState) -> str:
-        """
-        条件路由函数：根据 route 字段决定下一个节点
-
-        Args:
-            state: 当前状态
-
-        Returns:
-            下一个节点名称
-        """
-        route = state.get("route", "unknown")
-        logger.info(f"路由决策: {route}")
-        return route
-
-    def run(self, input_text: str, thread_id: str = "default") -> dict:
-        """
-        运行工作流的便捷方法
-
-        Args:
-            input_text: 用户输入
-            thread_id: 会话 ID
-
-        Returns:
-            执行结果
-        """
-        return self.invoke(
-            {"input": input_text, "route": "", "output": "", "error": None},
-            config={"configurable": {"thread_id": thread_id}},
-        )
-
-    async def arun(self, input_text: str, thread_id: str = "default") -> dict:
-        """
-        异步运行工作流的便捷方法
-
-        Args:
-            input_text: 用户输入
-            thread_id: 会话 ID
-
-        Returns:
-            执行结果
-        """
-        return await self.ainvoke(
-            {"input": input_text, "route": "", "output": "", "error": None},
-            config={"configurable": {"thread_id": thread_id}},
-        )
+    def _route_by_intent(state: IntentClassifierState) -> str:
+        return state.get("intent", "other")
 
 
-# ========== 工厂函数（保持向后兼容）==========
+# ========== 向后兼容别名（保持 API 稳定）==========
 
-def create_simple_router_workflow(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
-    """
-    创建简单路由工作流（工厂函数）
-
-    Args:
-        checkpointer: 状态持久化器（可选）
-
-    Returns:
-        编译后的工作流图
-    """
-    workflow = SimpleRouterWorkflow(checkpointer)
-    return workflow.graph
-
-
-def run_simple_router(input_text: str, thread_id: str = "default") -> dict:
-    """
-    运行简单路由工作流（便捷函数）
-
-    Args:
-        input_text: 用户输入
-        thread_id: 会话 ID
-
-    Returns:
-        执行结果
-    """
-    workflow = SimpleRouterWorkflow()
-    return workflow.run(input_text, thread_id)
-
-
-async def arun_simple_router(input_text: str, thread_id: str = "default") -> dict:
-    """
-    异步运行简单路由工作流
-
-    Args:
-        input_text: 用户输入
-        thread_id: 会话 ID
-
-    Returns:
-        执行结果
-    """
-    workflow = SimpleRouterWorkflow()
-    return await workflow.arun(input_text, thread_id)
+create_simple_router_workflow = IntentClassifierWorkflow
+run_simple_router = IntentClassifierWorkflow().run
+arun_simple_router = IntentClassifierWorkflow().arun

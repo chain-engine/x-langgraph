@@ -19,19 +19,27 @@ HANDLER_REGISTRY: dict[str, Callable] = {}
 def _register_handlers():
     """注册内置 handler"""
     from workflows.simple_router.nodes import (
-        router_node, search_node, calculate_node, weather_node, unknown_node,
+        classify_intent,
+        handle_product_inquiry,
+        handle_order_status,
+        handle_technical_support,
+        handle_complaint,
+        handle_billing,
+        handle_other,
     )
     from workflows.approval.nodes import (
         submit_node, evaluate_node, human_approval_node, auto_approve_node, notify_node,
     )
 
     HANDLER_REGISTRY.update({
-        "router": router_node,
-        "search": search_node,
-        "calculate": calculate_node,
-        "weather": weather_node,
-        "unknown": unknown_node,
-        
+        "classify": classify_intent,
+        "product_inquiry": handle_product_inquiry,
+        "order_status": handle_order_status,
+        "technical_support": handle_technical_support,
+        "complaint": handle_complaint,
+        "billing": handle_billing,
+        "other": handle_other,
+
         "submit": submit_node,
         "evaluate": evaluate_node,
         "human_approval": human_approval_node,

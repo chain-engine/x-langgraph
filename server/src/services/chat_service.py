@@ -129,9 +129,9 @@ class ChatService(Service):
         try:
             # 静态预定义工作流（硬编码路径）
             if workflow_name == "simple_router":
-                from workflows.simple_router.workflow import SimpleRouterWorkflow
+                from workflows.simple_router.workflow import IntentClassifierWorkflow
 
-                result = await SimpleRouterWorkflow().arun(message, session_id)
+                result = await IntentClassifierWorkflow().arun(message, session_id)
             elif workflow_name == "customer_service":
                 from workflows.customer_service.workflow import CustomerServiceWorkflow
 
@@ -220,11 +220,11 @@ class ChatService(Service):
                     return
 
                 # fallback 到 simple_router
-                from workflows.simple_router.workflow import SimpleRouterWorkflow
+                from workflows.simple_router.workflow import IntentClassifierWorkflow
 
-                workflow = SimpleRouterWorkflow()
+                workflow = IntentClassifierWorkflow()
                 event_source = workflow.astream(
-                    {"input": message, "route": "", "output": "", "error": None},
+                    message,
                     config={"configurable": {"thread_id": session_id}},
                 )
 
