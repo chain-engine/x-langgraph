@@ -5,12 +5,13 @@
 处理聊天业务逻辑，包括工作流执行和响应生成
 """
 
+import asyncio
+import json
 from typing import Any, Optional, AsyncGenerator
 
 from .base import Service
 from repositories.workflow_repository import WorkflowRepository
 from core.logger import logger
-from core.config import settings
 
 
 class ChatService(Service):
@@ -124,25 +125,32 @@ class ChatService(Service):
         """
         try:
             if workflow_type == "simple_router":
-                from workflows.simple_router import run_simple_router
-                result = await run_simple_router(message)
+                from workflows.simple_router.workflow import SimpleRouterWorkflow
+
+                result = await SimpleRouterWorkflow().arun(message, session_id)
             elif workflow_type == "customer_service":
-                from workflows.customer_service import run_customer_service
-                result = await run_customer_service(message, session_id)
+                from workflows.customer_service.workflow import CustomerServiceWorkflow
+
+                result = await CustomerServiceWorkflow().arun(message, session_id)
             elif workflow_type == "rag_qa":
                 from workflows.rag_qa import run_rag_qa
-                result = await run_rag_qa(message)
+
+                result = await asyncio.to_thread(run_rag_qa, message, session_id)
             elif workflow_type == "multi_agent":
                 from workflows.multi_agent import run_multi_agent
-                result = await run_multi_agent(message)
-            elif workflow_type == "approval":
-                from workflows.approval import run_approval_workflow
-                result = await run_approval_workflow(message, session_id)
-            else:
-                from workflows.simple_router import run_simple_router
-                result = await run_simple_router(message)
 
-            return result
+                result = await asyncio.to_thread(run_multi_agent, message, session_id)
+            elif workflow_type == "approval":
+                from workflows.approval.workflow import ApprovalWorkflow
+
+                request = self._build_approval_request(message, session_id)
+                result = await ApprovalWorkflow().arun(request, session_id)
+            else:
+                from workflows.simple_router.workflow import SimpleRouterWorkflow
+
+                result = await SimpleRouterWorkflow().arun(message, session_id)
+
+            return self._normalize_workflow_result(result)
         except ImportError as e:
             logger.error(f"Workflow import error: {e}")
             return {"response": "工作流加载失败", "node": None}
@@ -163,21 +171,80 @@ class ChatService(Service):
             dict: 流式事件
         """
         try:
-            if workflow_type == "simple_router":
-                from workflows.simple_router.base import SimpleRouterWorkflow
-                workflow = SimpleRouterWorkflow()
-                async for event in workflow.astream(message, session_id):
-                    yield event
-            elif workflow_type == "customer_service":
-                from workflows.customer_service.base import CustomerServiceWorkflow
+            if workflow_type == "customer_service":
+                from workflows.customer_service.workflow import CustomerServiceWorkflow
+
                 workflow = CustomerServiceWorkflow()
-                async for event in workflow.astream(message, session_id):
-                    yield event
+                event_source = workflow.astream_run(message, session_id)
             else:
-                from workflows.simple_router.base import SimpleRouterWorkflow
+                from workflows.simple_router.workflow import SimpleRouterWorkflow
+
                 workflow = SimpleRouterWorkflow()
-                async for event in workflow.astream(message, session_id):
-                    yield event
+                event_source = workflow.astream(
+                    {"input": message, "route": "", "output": "", "error": None},
+                    config={"configurable": {"thread_id": session_id}},
+                )
+
+            async for event in event_source:
+                async for stream_event in self._iter_stream_events(event):
+                    yield stream_event
         except Exception as e:
             logger.error(f"Stream workflow execution error: {e}")
             yield {"event": "error", "data": str(e)}
+
+    @staticmethod
+    def _build_approval_request(message: str, session_id: str) -> dict[str, Any]:
+        """从聊天消息构建审批请求（支持 JSON 或纯文本）"""
+        try:
+            parsed = json.loads(message)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        return {
+            "request_type": "expense",
+            "requester_id": session_id,
+            "requester_name": "用户",
+            "department": "默认部门",
+            "amount": 500.0,
+            "description": message,
+        }
+
+    @staticmethod
+    def _normalize_workflow_result(result: Any) -> dict[str, Any]:
+        """将各工作流返回值统一为 ChatService 响应格式"""
+        if hasattr(result, "model_dump"):
+            data = result.model_dump()
+            response = (
+                getattr(result, "final_decision", None)
+                or getattr(result, "final_output", None)
+                or getattr(result, "answer", None)
+                or ""
+            )
+            return {"response": response, "node": None, **data}
+
+        if isinstance(result, dict):
+            response = (
+                result.get("response")
+                or result.get("output")
+                or result.get("resolution")
+                or result.get("answer")
+                or result.get("final_decision")
+                or ""
+            )
+            node = result.get("node") or result.get("route") or result.get("stage")
+            return {"response": response, "node": node, **result}
+
+        return {"response": str(result), "node": None}
+
+    @staticmethod
+    async def _iter_stream_events(event: Any) -> AsyncGenerator[dict, None]:
+        """将 LangGraph 流式更新转换为 SSE 事件格式"""
+        if isinstance(event, dict):
+            for node_name, node_output in event.items():
+                yield {
+                    "event": "node_update",
+                    "node": node_name,
+                    "data": node_output,
+                }
