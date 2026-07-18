@@ -99,7 +99,6 @@ function getNodeColor(node?: string) {
         </button>
         <div>
           <h1 class="text-lg font-medium text-zinc-900">对话模式</h1>
-          <p class="text-xs text-zinc-500">使用 /chat 接口进行聊天</p>
         </div>
       </div>
 
