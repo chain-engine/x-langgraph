@@ -2,8 +2,6 @@
 """
 LangGraph 工作流示例入口
 
-本文件演示如何使用 workflows 模块中的各种工作流。
-
 运行方式:
     uv run python -m examples.agent_workflow
 """
@@ -11,57 +9,48 @@ LangGraph 工作流示例入口
 import sys
 from pathlib import Path
 
-# 添加 src 目录到 Python 路径
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from langgraph.types import Command
 
-from workflows.simple_router import create_simple_router_workflow, run_simple_router
+from workflows.intent_classifier import IntentClassifierWorkflow
 from workflows.customer_service import (
     create_customer_service_workflow,
-    run_customer_service,
     stream_customer_service,
 )
 
 from core.logger import logger
 
 
-def demo_simple_router():
-    """
-    演示简单路由工作流
-
-    展示功能：
-    - StateGraph 状态管理
-    - 条件边路由
-    - 工具调用
-    """
+def demo_intent_classifier():
+    """演示意图分类路由工作流"""
     print("\n" + "=" * 60)
-    print("【示例 1】简单路由工作流")
+    print("【示例 1】意图分类路由工作流")
     print("=" * 60)
 
     test_cases = [
-        "搜索 Python 教程",
-        "123 + 456 等于多少?",
-        "北京今天天气怎么样?",
+        ("你们的产品多少钱？", "产品咨询"),
+        ("我的订单什么时候发货？", "订单状态"),
+        ("登录报错，无法正常使用", "技术支持"),
+        ("服务太差了，我要投诉", "投诉"),
+        ("这个月的账单有问题", "账单"),
+        ("你好，今天天气不错", "其他"),
     ]
 
-    for i, user_input in enumerate(test_cases, 1):
-        print(f"\n--- 测试 {i}: {user_input} ---")
-        result = run_simple_router(user_input, thread_id=f"test-{i}")
-        print(f"路由: {result.get('route')}")
-        print(f"结果: {result.get('output')[:100]}...")
+    wf = IntentClassifierWorkflow()
+    for i, (user_input, desc) in enumerate(test_cases, 1):
+        print(f"\n--- 测试 {i}: {desc} ---")
+        result = wf.invoke(
+            user_input,
+            config={"configurable": {"thread_id": f"ic-{i}"}}
+        )
+        print(f"意图: {result.get('intent')}")
+        print(f"置信度: {result.get('confidence', 'N/A')}")
+        print(f"响应: {result.get('response', '')[:60]}...")
 
 
 def demo_customer_service():
-    """
-    演示智能客服工作流
-
-    展示功能：
-    - 复杂状态管理
-    - 多级条件路由
-    - Checkpointer 状态持久化
-    - 流式输出
-    """
+    """演示智能客服工作流"""
     print("\n" + "=" * 60)
     print("【示例 2】智能客服工作流")
     print("=" * 60)
@@ -76,7 +65,6 @@ def demo_customer_service():
         print(f"\n--- 测试 {i}: {desc} ---")
         print(f"用户输入: {user_input}")
 
-        # 使用流式输出
         print("\n[流式输出]")
         for event in stream_customer_service(user_input, thread_id=f"cs-{i}"):
             for node_name, node_output in event.items():
@@ -90,28 +78,18 @@ def demo_customer_service():
 
 
 def demo_human_in_the_loop():
-    """
-    演示人机交互 (Human-in-the-loop)
-
-    展示功能：
-    - interrupt() 暂停执行
-    - Command(resume=...) 恢复执行
-    - Checkpointer 状态持久化
-    """
+    """演示人机交互 (Human-in-the-loop)"""
     print("\n" + "=" * 60)
     print("【示例 3】人机交互 (Human-in-the-loop)")
     print("=" * 60)
 
-    # 创建工作流
     graph = create_customer_service_workflow()
     config = {"configurable": {"thread_id": "hitl-demo"}}
 
-    # 用户输入技术问题
     user_input = "我的账号遇到了技术问题，无法登录"
     print(f"\n用户输入: {user_input}")
     print("\n[第一阶段] 执行到人工审批节点...")
 
-    # 初始状态
     initial_state = {
         "messages": [{"role": "user", "content": user_input}],
         "stage": "",
@@ -126,19 +104,15 @@ def demo_human_in_the_loop():
         "error": None,
     }
 
-    # 流式执行直到中断
     for event in graph.stream(initial_state, config=config):
         for node_name, node_output in event.items():
             if isinstance(node_output, dict):
                 print(f"  节点 [{node_name}]: 工单ID={node_output.get('ticket_id')}, 类型={node_output.get('ticket_type')}")
 
-    # 检查当前状态
     state = graph.get_state(config)
     print(f"\n[中断点] 等待人工审批...")
     print(f"  当前状态: stage={state.values.get('stage')}")
-    print(f"  工单信息: {state.values.get('ticket_id')}, 类型={state.values.get('ticket_type')}")
 
-    # 模拟人工审批（审批通过）
     print("\n[第二阶段] 人工审批通过，恢复执行...")
 
     for event in graph.stream(
@@ -150,7 +124,6 @@ def demo_human_in_the_loop():
                 resolution = node_output.get("resolution", "")
                 print(f"  节点 [{node_name}]: {resolution[:50] if resolution else ''}...")
 
-    # 获取最终状态
     final_state = graph.get_state(config)
     print(f"\n[完成] 最终状态:")
     print(f"  工单ID: {final_state.values.get('ticket_id')}")
@@ -159,41 +132,31 @@ def demo_human_in_the_loop():
 
 
 def demo_checkpointer():
-    """
-    演示 Checkpointer 状态持久化
-
-    展示功能：
-    - 会话状态保存
-    - 会话恢复
-    """
+    """演示 Checkpointer 状态持久化"""
     print("\n" + "=" * 60)
     print("【示例 4】Checkpointer 状态持久化")
     print("=" * 60)
 
     from langgraph.checkpoint.memory import MemorySaver
 
-    # 创建共享的 checkpointer
     checkpointer = MemorySaver()
     thread_id = "session-123"
 
-    # 第一次请求
     print(f"\n[会话 {thread_id}] 第一次请求")
-    graph1 = create_simple_router_workflow(checkpointer)
+    graph1 = IntentClassifierWorkflow(checkpointer)
     result1 = graph1.invoke(
-        {"input": "北京天气", "route": "", "output": "", "error": None},
+        "你们的产品有什么功能？",
         config={"configurable": {"thread_id": thread_id}},
     )
-    print(f"  结果: {result1.get('output')[:100]}...")
+    print(f"  意图: {result1.get('intent')}")
 
-    # 获取当前状态
     state = graph1.get_state({"configurable": {"thread_id": thread_id}})
-    print(f"  保存的状态: input={state.values.get('input')}")
+    print(f"  保存的状态: {state.values}")
 
-    # 第二次请求（使用同一个 thread_id，可以恢复之前的会话）
     print(f"\n[会话 {thread_id}] 恢复会话")
-    graph2 = create_simple_router_workflow(checkpointer)
+    graph2 = IntentClassifierWorkflow(checkpointer)
     previous_state = graph2.get_state({"configurable": {"thread_id": thread_id}})
-    print(f"  恢复的状态: input={previous_state.values.get('input')}, route={previous_state.values.get('route')}")
+    print(f"  恢复的意图: {previous_state.values.get('intent')}")
 
 
 def main():
@@ -204,8 +167,7 @@ def main():
 
     logger.info("开始运行示例")
 
-    # 运行各示例
-    demo_simple_router()
+    demo_intent_classifier()
     demo_customer_service()
     demo_human_in_the_loop()
     demo_checkpointer()

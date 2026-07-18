@@ -2,89 +2,130 @@
 """
 工作流单元测试
 
-包含路由测试、工具测试、LLM Provider 测试
+包含意图分类、工具测试、LLM Provider 测试
 """
 
 import pytest
 import sys
 from pathlib import Path
 
-# 添加 src 目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
-# ========== 简单路由工作流测试 ==========
+# ========== 意图分类路由工作流测试 ==========
 
-class TestSimpleRouter:
-    """简单路由工作流测试"""
+class TestIntentClassifier:
+    """意图分类路由工作流测试"""
 
-    def test_search_route(self):
-        """测试搜索路由"""
-        from workflows.simple_router import run_simple_router
+    def test_product_inquiry_route(self):
+        """测试产品咨询路由"""
+        from workflows.intent_classifier import IntentClassifierWorkflow
 
-        result = run_simple_router("搜索 Python 教程", thread_id="test-search")
+        wf = IntentClassifierWorkflow()
+        result = wf.invoke(
+            "你们的产品多少钱？",
+            config={"configurable": {"thread_id": "test-product"}}
+        )
         assert result is not None
-        assert result.get("route") == "search"
+        assert result.get("intent") == "product_inquiry"
 
-    def test_calculate_route(self):
-        """测试计算路由"""
-        from workflows.simple_router import run_simple_router
+    def test_order_status_route(self):
+        """测试订单状态路由"""
+        from workflows.intent_classifier import IntentClassifierWorkflow
 
-        result = run_simple_router("123 + 456", thread_id="test-calc")
+        wf = IntentClassifierWorkflow()
+        result = wf.invoke(
+            "我的订单什么时候发货？",
+            config={"configurable": {"thread_id": "test-order"}}
+        )
         assert result is not None
-        assert result.get("route") == "calculate"
+        assert result.get("intent") == "order_status"
 
-    def test_weather_route(self):
-        """测试天气路由"""
-        from workflows.simple_router import run_simple_router
+    def test_technical_support_route(self):
+        """测试技术支持路由"""
+        from workflows.intent_classifier import IntentClassifierWorkflow
 
-        result = run_simple_router("北京天气", thread_id="test-weather")
+        wf = IntentClassifierWorkflow()
+        result = wf.invoke(
+            "登录报错，无法正常使用",
+            config={"configurable": {"thread_id": "test-tech"}}
+        )
         assert result is not None
-        assert result.get("route") == "weather"
+        assert result.get("intent") == "technical_support"
 
-    def test_unknown_route(self):
-        """测试未知输入的路由"""
-        from workflows.simple_router import run_simple_router
+    def test_complaint_route(self):
+        """测试投诉路由"""
+        from workflows.intent_classifier import IntentClassifierWorkflow
 
-        result = run_simple_router("随机无意义文本 xyz123", thread_id="test-unknown")
+        wf = IntentClassifierWorkflow()
+        result = wf.invoke(
+            "服务太差了，我要投诉",
+            config={"configurable": {"thread_id": "test-complaint"}}
+        )
         assert result is not None
-        # 未知输入应该降级到搜索
-        assert result.get("route") in ["search", "unknown"]
+        assert result.get("intent") == "complaint"
+
+    def test_billing_route(self):
+        """测试账单路由"""
+        from workflows.intent_classifier import IntentClassifierWorkflow
+
+        wf = IntentClassifierWorkflow()
+        result = wf.invoke(
+            "这个月的账单有问题",
+            config={"configurable": {"thread_id": "test-billing"}}
+        )
+        assert result is not None
+        assert result.get("intent") == "billing"
+
+    def test_other_route(self):
+        """测试其他/闲聊路由"""
+        from workflows.intent_classifier import IntentClassifierWorkflow
+
+        wf = IntentClassifierWorkflow()
+        result = wf.invoke(
+            "你好啊，今天天气不错",
+            config={"configurable": {"thread_id": "test-other"}}
+        )
+        assert result is not None
+        assert result.get("intent") == "other"
 
     def test_workflow_creation(self):
         """测试工作流创建"""
-        from workflows.simple_router import create_simple_router_workflow
+        from workflows.intent_classifier import IntentClassifierWorkflow
         from langgraph.checkpoint.memory import MemorySaver
 
         checkpointer = MemorySaver()
-        graph = create_simple_router_workflow(checkpointer)
+        graph = IntentClassifierWorkflow(checkpointer)
 
         assert graph is not None
 
-    def test_routing_metadata(self):
-        """测试路由元数据"""
-        from workflows.simple_router import run_simple_router
+    def test_confidence_field(self):
+        """测试置信度字段"""
+        from workflows.intent_classifier import IntentClassifierWorkflow
 
-        result = run_simple_router("计算 100 除以 5", thread_id="test-metadata")
+        wf = IntentClassifierWorkflow()
+        result = wf.invoke(
+            "你们有什么产品？",
+            config={"configurable": {"thread_id": "test-confidence"}}
+        )
         assert result is not None
-        # 应该有路由元数据
-        assert "routing_reasoning" in result or result.get("route") is not None
+        assert "confidence" in result
 
 
-class TestSimpleRouterAdvanced:
-    """简单路由高级测试"""
+class TestIntentClassifierAdvanced:
+    """意图分类路由高级测试"""
 
     def test_concurrent_sessions(self):
         """测试并发会话"""
-        from workflows.simple_router import create_simple_router_workflow
+        from workflows.intent_classifier import IntentClassifierWorkflow
         from langgraph.checkpoint.memory import MemorySaver
         import concurrent.futures
 
         def run_session(session_id):
             checkpointer = MemorySaver()
-            graph = create_simple_router_workflow(checkpointer)
+            graph = IntentClassifierWorkflow(checkpointer)
             return graph.invoke(
-                {"input": "测试消息", "route": "", "output": "", "error": None},
+                "产品咨询",
                 config={"configurable": {"thread_id": session_id}}
             )
 
@@ -97,11 +138,14 @@ class TestSimpleRouterAdvanced:
 
     def test_chinese_input(self):
         """测试中文输入"""
-        from workflows.simple_router import run_simple_router
+        from workflows.intent_classifier import IntentClassifierWorkflow
 
-        result = run_simple_router("帮我查一下上海今天热不热", thread_id="test-chinese")
+        wf = IntentClassifierWorkflow()
+        result = wf.invoke(
+            "帮我查一下订单物流",
+            config={"configurable": {"thread_id": "test-chinese"}}
+        )
         assert result is not None
-        assert result.get("route") in ["weather", "search"]
 
 
 # ========== 工具测试 ==========
@@ -137,7 +181,6 @@ class TestTools:
         from tools.weather_tools import weather_query_tool
 
         result = weather_query_tool.invoke("测试城市")
-        # 应该返回模拟数据或错误信息
         assert result is not None
 
     def test_csv_processor_columns(self):
@@ -229,11 +272,9 @@ class TestLLMProvider:
         """测试提示模板管理器"""
         from llm.prompts import prompt_manager
 
-        # 列出模板
         templates = prompt_manager.list_templates()
         assert len(templates) > 0
 
-        # 获取模板
         template = prompt_manager.get("system_default")
         assert template is not None
 
@@ -262,48 +303,46 @@ class TestSettings:
         """测试 API Key 检查"""
         from config.settings import settings
 
-        # 方法存在即可
         assert hasattr(settings, "has_valid_api_key")
 
     def test_validate_model_config(self):
         """测试模型配置验证"""
         from config.settings import settings
 
-        # Mock 总是有效的
         assert settings.validate_model_config("mock") is True
 
 
-# ========== 异步测试（使用同步包装）==========
+# ========== 异步测试 ==========
 
 class TestAsyncWorkflows:
     """异步工作流测试"""
 
-    def test_simple_router_invoke_basic(self):
+    def test_intent_classifier_invoke_basic(self):
         """测试基本调用（验证工作流正常）"""
-        from workflows.simple_router import create_simple_router_workflow
+        from workflows.intent_classifier import IntentClassifierWorkflow
         from langgraph.checkpoint.memory import MemorySaver
 
         checkpointer = MemorySaver()
-        graph = create_simple_router_workflow(checkpointer)
+        graph = IntentClassifierWorkflow(checkpointer)
 
         result = graph.invoke(
-            {"input": "北京天气", "route": "", "output": "", "error": None},
+            "产品功能介绍",
             config={"configurable": {"thread_id": "basic-test"}}
         )
 
         assert result is not None
-        assert "route" in result
+        assert "intent" in result
 
-    def test_simple_router_stream_basic(self):
+    def test_intent_classifier_stream_basic(self):
         """测试基本流式调用"""
-        from workflows.simple_router import create_simple_router_workflow
+        from workflows.intent_classifier import IntentClassifierWorkflow
         from langgraph.checkpoint.memory import MemorySaver
 
         checkpointer = MemorySaver()
-        graph = create_simple_router_workflow(checkpointer)
+        graph = IntentClassifierWorkflow(checkpointer)
 
         events = list(graph.stream(
-            {"input": "123 + 456", "route": "", "output": "", "error": None},
+            "我想查一下账单",
             config={"configurable": {"thread_id": "stream-basic-test"}},
             stream_mode="updates"
         ))

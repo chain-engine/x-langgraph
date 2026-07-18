@@ -117,7 +117,7 @@ x-langgraph/
 │   │   ├── schemas/                  # Data Model Layer (Pydantic Schema)
 │   │   ├── llm/                      # LLM Provider Module
 │   │   ├── tools/                    # Tool Module (weather, search, calculation)
-│   │   ├── workflows/                # Workflow Module (simple_router, approval, compiler)
+│   │   ├── workflows/                # Workflow Module (intent_classifier, approval, compiler)
 │   │   └── main.py                   # FastAPI application entry
 │   ├── examples/                     # Example code
 │   ├── tests/                        # Test code
@@ -363,7 +363,7 @@ npm run dev
 
 After frontend starts:
 - Visual Interface: http://localhost:5173
-- Workflow Editor: http://localhost:5173/editor/simple_router
+- Workflow Editor: http://localhost:5173/editor/intent_classifier
 
 ### Common Commands
 
@@ -477,7 +477,7 @@ curl -X POST http://localhost:8000/chat \
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key-here" \
-  -d '{"message": "Beijing weather", "session_id": "test-123", "workflow": "simple_router"}'
+  -d '{"message": "What is the price of your product?", "session_id": "test-123", "workflow": "intent_classifier"}'
 
 # Streaming chat (SSE)
 curl -X POST http://localhost:8000/chat/stream \

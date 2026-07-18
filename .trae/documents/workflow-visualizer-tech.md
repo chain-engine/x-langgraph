@@ -24,7 +24,7 @@ graph TB
     end
 
     subgraph BuiltIn["内置工作流（种子数据）"]
-        SR["simple_router"]
+        IC["intent_classifier"]
         AP["approval"]
     end
 
@@ -188,7 +188,7 @@ CREATE TABLE execution_logs (
 ```
 
 ### 5.3 种子数据
-系统启动时检查 `workflow_definitions` 表，若为空则从内置 Python 工作流（simple_router、approval）提取结构，生成 JSON 种子数据插入。
+系统启动时检查 `workflow_definitions` 表，若为空则从内置 Python 工作流（intent_classifier、approval）提取结构，生成 JSON 种子数据插入。
 
 ## 6. GraphCompiler 工作原理
 
@@ -208,11 +208,13 @@ CREATE TABLE execution_logs (
 **Handler 映射表**（内置）：
 | handler 标识 | 对应函数 |
 |-------------|---------|
-| `router_llm` | `workflows.simple_router.nodes.router_node` |
-| `search` | `workflows.simple_router.nodes.search_node` |
-| `calculate` | `workflows.simple_router.nodes.calculate_node` |
-| `weather` | `workflows.simple_router.nodes.weather_node` |
-| `unknown` | `workflows.simple_router.nodes.unknown_node` |
+| `classify` | `workflows.intent_classifier.nodes.classify_intent` |
+| `product_inquiry` | `workflows.intent_classifier.nodes.handle_product_inquiry` |
+| `order_status` | `workflows.intent_classifier.nodes.handle_order_status` |
+| `technical_support` | `workflows.intent_classifier.nodes.handle_technical_support` |
+| `complaint` | `workflows.intent_classifier.nodes.handle_complaint` |
+| `billing` | `workflows.intent_classifier.nodes.handle_billing` |
+| `other` | `workflows.intent_classifier.nodes.handle_other` |
 | `approval_request` | `workflows.approval.nodes.*` |
 | `approval_review` | `workflows.approval.nodes.*` |
 

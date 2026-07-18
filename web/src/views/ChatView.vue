@@ -155,7 +155,7 @@ function getNodeColor(node?: string) {
       <div v-if="chat.messages.length === 0" class="flex flex-col items-center justify-center h-full text-center">
         <Sparkles class="mb-4 text-zinc-400" :size="48" />
         <p class="text-zinc-500">选择工作流并发送消息开始对话</p>
-        <p class="mt-2 text-xs text-zinc-400">支持 simple_router 和 approval 工作流</p>
+        <p class="mt-2 text-xs text-zinc-400">支持意图分类路由和自动化审批工作流</p>
       </div>
 
       <div
