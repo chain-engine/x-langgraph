@@ -859,23 +859,6 @@ def _get_next_agent(state: MultiAgentState, completed_agent: AgentRole | str, ca
     return AgentRole.END_NODE
 
 
-def _get_next_route(state: MultiAgentState, completed_role: AgentRole | str) -> str:
-    """
-    根据已完成的任务确定下一个路由目标（兼容旧代码）
-
-    Args:
-        state: 当前状态
-        completed_role: 已完成任务的角色
-
-    Returns:
-        下一个路由目标（agent 名称或 AgentRole.END_NODE）
-    """
-    return _get_next_agent(
-        state, completed_role,
-        [AgentRole.RESEARCHER, AgentRole.WRITER, AgentRole.EDITOR, AgentRole.REVIEWER]
-    )
-
-
 # ===== 条件路由函数 =====
 
 
