@@ -75,7 +75,7 @@ def handle_product_inquiry_node(state: IntentClassifierState) -> dict:
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
-        "response": (
+        "output": (
             "感谢您的产品咨询！我们的产品具有以下核心优势：\n"
             "1. 高性能：采用最新算法优化，响应速度快\n"
             "2. 易用性：提供 SDK 和 REST API，接入简单\n"
@@ -90,7 +90,7 @@ def handle_order_status_node(state: IntentClassifierState) -> dict:
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
-        "response": (
+        "output": (
             "正在为您查询订单状态...\n\n"
             "请提供您的订单号，我将为您查询详细的物流进度。"
             f"\n\n您刚才提到「{user_input}」，我会尽快帮您处理。"
@@ -117,7 +117,7 @@ def handle_technical_support_node(state: IntentClassifierState) -> dict:
             return {
                 "approved": True,
                 "approval_comments": response.get("comments", ""),
-                "response": (
+                "output": (
                     "【人工处理中】您的技术问题已转交给技术支持工程师，"
                     "预计 24 小时内给您回复。也可拨打客服热线：400-xxx-xxxx"
                 ),
@@ -126,7 +126,7 @@ def handle_technical_support_node(state: IntentClassifierState) -> dict:
             return {
                 "approved": False,
                 "approval_comments": response.get("comments", ""),
-                "response": (
+                "output": (
                     "根据您的问题「" + user_input + "」，"
                     "建议您先查阅我们的常见问题解答或操作手册。"
                     "如仍有问题，欢迎随时联系我们。"
@@ -134,7 +134,7 @@ def handle_technical_support_node(state: IntentClassifierState) -> dict:
             }
 
     return {
-        "response": (
+        "output": (
             "【AI 处理】针对您的技术问题，请尝试以下步骤：\n"
             "1. 确认网络连接正常\n"
             "2. 清除浏览器缓存后重试\n"
@@ -149,7 +149,7 @@ def handle_complaint_node(state: IntentClassifierState) -> dict:
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
-        "response": (
+        "output": (
             "非常抱歉给您带来了不好的体验。\n\n"
             f"您反馈的问题「{user_input}」我们已记录，"
             "我们的客服团队将在 24 小时内与您联系解决。\n"
@@ -163,7 +163,7 @@ def handle_billing_node(state: IntentClassifierState) -> dict:
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
-        "response": (
+        "output": (
             "关于您的账单疑问，以下是常见处理方式：\n"
             "- 费用明细：可登录控制台查看详细账单\n"
             "- 发票申请：联系客服或通过管理后台自助申请\n"
@@ -178,7 +178,7 @@ def handle_other_node(state: IntentClassifierState) -> dict:
     messages = state.get("messages", [])
     user_input = messages[-1].get("content", "") if messages else ""
     return {
-        "response": (
+        "output": (
             f"感谢您的来信！关于「{user_input}」，"
             "请告诉我具体的需求，我可以帮您：\n"
             "- 查询产品信息和价格\n"

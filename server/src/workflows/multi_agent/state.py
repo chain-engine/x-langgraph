@@ -16,43 +16,86 @@ from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
 
-class AgentRole(str, Enum):
+class DescribedEnum(Enum):
+    """
+    可描述的枚举类基建
+    mark: int        唯一标识
+    desc: str        描述信息
+    """
+
+    def __init__(self, mark: int | str, desc: str) -> None:
+        self._mark = mark
+        self._desc = desc
+
+    @property
+    def mark(self) -> int | str:
+        return self._mark
+
+    @property
+    def value(self) -> str:
+        """重写 value，使枚举可直接赋值给 str 类型字段（如 Pydantic BaseModel）"""
+        return str(self._mark)
+
+    @property
+    def desc(self) -> str:
+        return self._desc
+
+    def __str__(self) -> str:
+        return str(self._mark)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Enum):
+            return super().__eq__(other)
+        if isinstance(other, str):
+            return self._mark == other
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._mark)
+
+    @classmethod
+    def get_all_marks(cls) -> list[int]:
+        return [described_enum.mark for described_enum in cls]
+
+    @classmethod
+    def get_all_descs(cls) -> list[str]:
+        return [described_enum.desc for described_enum in cls]
+
+    @classmethod
+    def get_choices(cls) -> tuple[tuple[int, str], ...]:
+        return tuple((described_enum.mark, described_enum.desc) for described_enum in cls)
+
+
+
+class AgentRole(DescribedEnum):
     """智能体角色枚举"""
 
     # 核心角色
-    COORDINATOR = "coordinator"  # 协调者：任务分解和分配
-    RESEARCHER = "researcher"  # 研究员：信息收集和分析
-    WRITER = "writer"  # 撰写者：内容生成
-    EDITOR = "editor"  # 编辑：内容优化
-    REVIEWER = "reviewer"  # 审核员：质量控制
-
-    # ===== 预留：Handoff 模式角色 =====
-    # SUPERVISOR = "supervisor"  # 主管：监督多个 Agent
-    # HANDOFF_TARGET = "handoff_target"  # Handoff 目标标记
-
-    # ===== 预留：Team 模式角色 =====
-    # TEAM_LEADER = "team_leader"  # 团队领导
-    # SPECIALIST = "specialist"  # 专家
-    # ORCHESTRATOR = "orchestrator"  # 编排器
+    COORDINATOR = "coordinator", "协调者"
+    RESEARCHER = "researcher", "研究员"
+    WRITER = "writer", "撰写者"
+    EDITOR = "editor", "编辑"
+    REVIEWER = "reviewer", "审核员"
+    END_NODE = "__end__", "工作流结束"
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(DescribedEnum):
     """任务状态枚举"""
 
-    PENDING = "pending"  # 待处理
-    IN_PROGRESS = "in_progress"  # 执行中
-    COMPLETED = "completed"  # 已完成
-    FAILED = "failed"  # 失败
-    CANCELLED = "cancelled"  # 已取消
+    PENDING = "pending", "待处理"
+    IN_PROGRESS = "in_progress", "进行中"
+    COMPLETED = "completed", "已完成"
+    FAILED = "failed", "失败"
+    CANCELLED = "cancelled", "已取消"
 
 
-class TaskPriority(str, Enum):
+class TaskPriority(DescribedEnum):
     """任务优先级"""
 
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    URGENT = "urgent"
+    LOW = "low", "低"
+    MEDIUM = "medium", "中"
+    HIGH = "high", "高"
+    URGENT = "urgent", "紧急"
 
 
 class AgentHandoff(BaseModel):
@@ -150,7 +193,7 @@ class MultiAgentState(TypedDict):
     draft_content: str
     edited_content: str
     review_feedback: str
-    final_output: str
+    output: str
 
     # ===== 执行控制 =====
     current_stage: str  # 当前阶段
@@ -183,7 +226,7 @@ class MultiAgentResult(BaseModel):
     """多智能体协作结果"""
 
     original_request: str = Field(..., description="原始请求")
-    final_output: str = Field(default="", description="最终输出")
+    output: str = Field(default="", description="最终输出")
     tasks_completed: int = Field(default=0, description="完成的任务数")
     tasks_total: int = Field(default=0, description="总任务数")
     iteration_count: int = Field(default=0, description="迭代次数")

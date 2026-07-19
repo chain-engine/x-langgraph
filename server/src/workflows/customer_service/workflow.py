@@ -135,7 +135,7 @@ class CustomerServiceWorkflow(BaseWorkflow):
             "ticket_type": None,
             "priority": None,
             "customer_name": None,
-            "resolution": None,
+            "output": None,
             "requires_approval": False,
             "approved": None,
             "approval_comments": None,

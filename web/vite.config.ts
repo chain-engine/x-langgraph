@@ -18,7 +18,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api/workflows': 'http://localhost:8000/api',
+      '/workflows': 'http://localhost:8000',
       '/chat': 'http://localhost:8000',
       '/approval': 'http://localhost:8000',
       '/health': 'http://localhost:8000',

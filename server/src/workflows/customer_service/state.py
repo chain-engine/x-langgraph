@@ -25,7 +25,7 @@ class CustomerServiceState(TypedDict):
     customer_name: Optional[str]
 
     # 处理结果
-    resolution: Optional[str]
+    output: Optional[str]
 
     # 人机交互
     requires_approval: bool

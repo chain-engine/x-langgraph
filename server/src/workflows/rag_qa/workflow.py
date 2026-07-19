@@ -121,7 +121,7 @@ def run_rag_qa(
         "retrieved_docs": [],
         "retrieval_score": None,
         "context": "",
-        "answer": "",
+        "output": "",
         "sources": [],
         "stage": "",
         "needs_clarification": False,
@@ -135,7 +135,7 @@ def run_rag_qa(
     # 构建返回结果
     return RAGQAResult(
         question=result.get("question", question),
-        answer=result.get("answer", ""),
+        answer=result.get("output", ""),
         sources=result.get("sources", []),
         retrieved_docs_count=len(result.get("retrieved_docs", [])),
         retrieval_score=result.get("retrieval_score"),
@@ -174,7 +174,7 @@ def stream_rag_qa(
         "retrieved_docs": [],
         "retrieval_score": None,
         "context": "",
-        "answer": "",
+        "output": "",
         "sources": [],
         "stage": "",
         "needs_clarification": False,

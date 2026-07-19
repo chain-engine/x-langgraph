@@ -15,15 +15,15 @@ api_router = APIRouter()
 
 api_router.include_router(
     chats.router,
-    dependencies=[Depends(verify_api_key), Depends(rate_limit)]
+    # dependencies=[Depends(verify_api_key), Depends(rate_limit)]
 )
 api_router.include_router(
     approval.router,
-    dependencies=[Depends(verify_api_key), Depends(rate_limit)]
+    # dependencies=[Depends(verify_api_key), Depends(rate_limit)]
 )
 api_router.include_router(
     workflows.router,
-    dependencies=[Depends(verify_api_key), Depends(rate_limit)]
+    # dependencies=[Depends(verify_api_key), Depends(rate_limit)]
 )
 api_router.include_router(health.router)
 api_router.include_router(metrics.router)

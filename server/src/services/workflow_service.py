@@ -88,7 +88,7 @@ class WorkflowDefinitionService:
                 config={"configurable": {"thread_id": session_id}},
             )
             return {
-                "response": result.get("output", result.get("final_decision", "")),
+                "response": result.get("output", ""),
                 "session_id": session_id,
                 "node": None,
                 "state": result,
@@ -125,7 +125,7 @@ class WorkflowDefinitionService:
                         "data": node_output,
                     }
 
-            response = latest_state.get("output", latest_state.get("final_decision", ""))
+            response = latest_state.get("output", "")
             yield {"event": "done", "data": {"response": response, "state": latest_state}}
         except Exception as e:
             logger.error(f"Workflow stream failed: {e}", exc_info=True)
@@ -181,4 +181,12 @@ class WorkflowDefinitionService:
                 await self._repository.create(definition)
                 logger.info(f"Seeded workflow: {definition['name']}")
             else:
-                logger.info(f"Workflow already exists, skipping: {definition['name']}")
+                # 迁移：更新旧工作流的 state_schema，补充缺失的 output 字段
+                existing_schema = existing.get("state_schema", {})
+                updated_schema = {**existing_schema, **definition["state_schema"]}
+                if existing_schema != updated_schema:
+                    existing["state_schema"] = updated_schema
+                    await self._repository.update(definition["name"], existing)
+                    logger.info(f"Migrated workflow schema: {definition['name']}")
+                else:
+                    logger.info(f"Workflow already exists, skipping: {definition['name']}")

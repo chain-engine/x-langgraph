@@ -54,9 +54,10 @@ from workflows.multi_agent.nodes import (
     route_for_parallel_node,
     get_parallel_tasks,
     should_parallel_execute,
-    # Tool Calling 预留函数
-    bind_tools_to_agent,
+    # Tool Calling
     create_researcher_with_tools,
+    create_writer_with_tools,
+    create_database_query_node,
 )
 
 __all__ = [
@@ -94,7 +95,8 @@ __all__ = [
     "route_for_parallel_node",
     "get_parallel_tasks",
     "should_parallel_execute",
-    # Tool Calling 预留
-    "bind_tools_to_agent",
+    # Tool Calling
     "create_researcher_with_tools",
+    "create_writer_with_tools",
+    "create_database_query_node",
 ]

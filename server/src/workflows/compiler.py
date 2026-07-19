@@ -8,6 +8,7 @@
 from typing import Any, Callable
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph.state import CompiledStateGraph
 
 from core.logger import logger
 
@@ -135,7 +136,7 @@ def _get_state_class(state_schema: dict[str, str]):
     return TypedDict("DynamicState", fields)  # type: ignore
 
 
-def compile_workflow(definition: dict[str, Any], checkpointer=None):
+def compile_workflow(definition: dict[str, Any], checkpointer=None) -> CompiledStateGraph:
     """
     将 JSON 工作流定义编译为 LangGraph StateGraph
 

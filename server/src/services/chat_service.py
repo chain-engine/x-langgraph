@@ -270,7 +270,7 @@ class ChatService(Service):
                     "data": node_output,
                 }
 
-        response = latest_state.get("output", latest_state.get("final_decision", ""))
+        response = latest_state.get("output", "")
         yield {"event": "done", "data": {"response": response, "state": latest_state}}
 
     @staticmethod
@@ -297,21 +297,13 @@ class ChatService(Service):
         """将各工作流返回值统一为 ChatService 响应格式"""
         if hasattr(result, "model_dump"):
             data = result.model_dump()
-            response = (
-                getattr(result, "final_decision", None)
-                or getattr(result, "final_output", None)
-                or getattr(result, "answer", None)
-                or ""
-            )
+            response = getattr(result, "output", None) or ""
             return {"response": response, "node": None, **data}
 
         if isinstance(result, dict):
             response = (
-                result.get("response")
-                or result.get("output")
-                or result.get("resolution")
-                or result.get("answer")
-                or result.get("final_decision")
+                result.get("output")
+                or result.get("response")
                 or ""
             )
             node = result.get("node") or result.get("route") or result.get("stage")

@@ -297,13 +297,13 @@ def _process_human_decision(state: ApprovalState) -> dict:
     if approved:
         return {
             "final_status": ApprovalStatus.APPROVED.value,
-            "final_decision": f"审批通过: {comments}",
+            "output": f"审批通过: {comments}",
             "approval_status": ApprovalStatus.APPROVED.value,
         }
     else:
         return {
             "final_status": ApprovalStatus.REJECTED.value,
-            "final_decision": f"审批拒绝: {comments}",
+            "output": f"审批拒绝: {comments}",
             "approval_status": ApprovalStatus.REJECTED.value,
         }
 
@@ -343,7 +343,7 @@ def auto_approve_node(state: ApprovalState) -> dict:
 
     return {
         "final_status": ApprovalStatus.APPROVED.value,
-        "final_decision": "系统自动审批通过",
+        "output": "系统自动审批通过",
         "approval_status": ApprovalStatus.APPROVED.value,
         "requires_human": False,
         "approval_history": history,

@@ -129,7 +129,7 @@ class ApprovalWorkflow(BaseWorkflow):
             "human_comments": None,
             "approver_id": None,
             "final_status": "",
-            "final_decision": "",
+            "output": "",
             "notification_sent": False,
             "error": None,
         }
@@ -155,7 +155,7 @@ class ApprovalWorkflow(BaseWorkflow):
         return ApprovalResult(
             request_id=result.get("request", {}).get("request_id", ""),
             final_status=result.get("final_status", ""),
-            final_decision=result.get("final_decision", ""),
+            final_decision=result.get("output", ""),
             approval_history=result.get("approval_history", []),
             auto_evaluation=result.get("auto_evaluation", {}),
             risk_level=result.get("risk_level", "unknown"),
@@ -184,7 +184,7 @@ class ApprovalWorkflow(BaseWorkflow):
         return ApprovalResult(
             request_id=result.get("request", {}).get("request_id", ""),
             final_status=result.get("final_status", ""),
-            final_decision=result.get("final_decision", ""),
+            final_decision=result.get("output", ""),
             approval_history=result.get("approval_history", []),
             auto_evaluation=result.get("auto_evaluation", {}),
             risk_level=result.get("risk_level", "unknown"),
@@ -237,7 +237,7 @@ class ApprovalWorkflow(BaseWorkflow):
         return ApprovalResult(
             request_id=request.get("request_id", ""),
             final_status=final_state.values.get("final_status", ""),
-            final_decision=final_state.values.get("final_decision", ""),
+            final_decision=final_state.values.get("output", ""),
             approval_history=final_state.values.get("approval_history", []),
             auto_evaluation=final_state.values.get("auto_evaluation", {}),
             risk_level=final_state.values.get("risk_level", "unknown"),

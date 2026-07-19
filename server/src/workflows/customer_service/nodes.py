@@ -87,7 +87,7 @@ def handle_inquiry_node(state: CustomerServiceState) -> dict:
 
     return {
         "stage": "handle",
-        "resolution": faq_result,
+        "output": faq_result,
     }
 
 
@@ -106,7 +106,7 @@ def handle_complaint_node(state: CustomerServiceState) -> dict:
 
     return {
         "stage": "handle",
-        "resolution": resolution,
+        "output": resolution,
     }
 
 
@@ -140,20 +140,20 @@ def handle_technical_node(state: CustomerServiceState) -> dict:
                 "stage": "handle",
                 "approved": True,
                 "approval_comments": response.get("comments", ""),
-                "resolution": "技术问题已审批通过，已分配给技术支持团队处理。",
+                "output": "技术问题已审批通过，已分配给技术支持团队处理。",
             }
         else:
             return {
                 "stage": "handle",
                 "approved": False,
                 "approval_comments": response.get("comments", ""),
-                "resolution": "技术问题审批未通过，建议用户参考文档或等待后续处理。",
+                "output": "技术问题审批未通过，建议用户参考文档或等待后续处理。",
             }
 
     # 已审批或不需要审批
     return {
         "stage": "handle",
-        "resolution": "技术问题已转交给技术支持团队，预计 4 小时内响应。",
+        "output": "技术问题已转交给技术支持团队，预计 4 小时内响应。",
     }
 
 
@@ -172,7 +172,7 @@ def handle_billing_node(state: CustomerServiceState) -> dict:
 
     return {
         "stage": "handle",
-        "resolution": resolution,
+        "output": resolution,
     }
 
 
@@ -188,11 +188,11 @@ def review_node(state: CustomerServiceState) -> dict:
     """
     logger.info(f"执行质量审核: {state.get('ticket_id')}")
 
-    resolution = state.get("resolution", "")
+    output = state.get("output", "")
     error = None
 
     # 简单的质量检查
-    if not resolution or len(resolution) < 10:
+    if not output or len(output) < 10:
         error = "处理结果不完整，需要补充"
 
     return {

@@ -19,7 +19,7 @@
                              └→ complete → END
 """
 
-from typing import Optional
+from typing import Optional, Any
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -41,6 +41,9 @@ from workflows.multi_agent.nodes import (
     reviewer_node,
     route_to_agent_node,
     handoff_router,
+    create_researcher_with_tools,
+    create_writer_with_tools,
+    create_database_query_node,
 )
 
 from core.logger import logger
@@ -89,80 +92,132 @@ class MultiAgentWorkflow(BaseWorkflow):
         workflow = StateGraph(MultiAgentState)
 
         # ===== 添加节点 =====
-        workflow.add_node("coordinator", coordinator_node)
-        workflow.add_node("researcher", researcher_node)
-        workflow.add_node("writer", writer_node)
-        workflow.add_node("editor", editor_node)
-        workflow.add_node("reviewer", reviewer_node)
+        workflow.add_node(str(AgentRole.COORDINATOR), coordinator_node)
+        workflow.add_node(str(AgentRole.RESEARCHER), researcher_node)
+        workflow.add_node(str(AgentRole.WRITER), writer_node)
+        workflow.add_node(str(AgentRole.EDITOR), editor_node)
+        workflow.add_node(str(AgentRole.REVIEWER), reviewer_node)
 
         # 设置入口点
-        workflow.set_entry_point("coordinator")
+        workflow.set_entry_point(str(AgentRole.COORDINATOR))
 
         # ===== Handoff 条件路由 =====
         # 每个 Agent 节点都通过 handoff_router 决定下一步
-        # 这样每个 Agent 都可以自己决定下一步（真正的 Handoff）
 
         workflow.add_conditional_edges(
-            "coordinator",
+            str(AgentRole.COORDINATOR),
             handoff_router,
             {
-                "researcher": "researcher",
-                "writer": "writer",
-                "editor": "editor",
-                "reviewer": "reviewer",
-                "END": END,
+                str(AgentRole.RESEARCHER): str(AgentRole.RESEARCHER),
+                str(AgentRole.WRITER): str(AgentRole.WRITER),
+                str(AgentRole.EDITOR): str(AgentRole.EDITOR),
+                str(AgentRole.REVIEWER): str(AgentRole.REVIEWER),
+                str(AgentRole.END_NODE): END,
             },
         )
 
         workflow.add_conditional_edges(
-            "researcher",
+            str(AgentRole.RESEARCHER),
             handoff_router,
             {
-                "researcher": "researcher",
-                "writer": "writer",
-                "editor": "editor",
-                "reviewer": "reviewer",
-                "END": END,
+                str(AgentRole.RESEARCHER): str(AgentRole.RESEARCHER),
+                str(AgentRole.WRITER): str(AgentRole.WRITER),
+                str(AgentRole.EDITOR): str(AgentRole.EDITOR),
+                str(AgentRole.REVIEWER): str(AgentRole.REVIEWER),
+                str(AgentRole.END_NODE): END,
             },
         )
 
         workflow.add_conditional_edges(
-            "writer",
+            str(AgentRole.WRITER),
             handoff_router,
             {
-                "researcher": "researcher",
-                "writer": "writer",
-                "editor": "editor",
-                "reviewer": "reviewer",
-                "END": END,
+                str(AgentRole.RESEARCHER): str(AgentRole.RESEARCHER),
+                str(AgentRole.WRITER): str(AgentRole.WRITER),
+                str(AgentRole.EDITOR): str(AgentRole.EDITOR),
+                str(AgentRole.REVIEWER): str(AgentRole.REVIEWER),
+                str(AgentRole.END_NODE): END,
             },
         )
 
         workflow.add_conditional_edges(
-            "editor",
+            str(AgentRole.EDITOR),
             handoff_router,
             {
-                "researcher": "researcher",
-                "writer": "writer",
-                "editor": "editor",
-                "reviewer": "reviewer",
-                "END": END,
+                str(AgentRole.RESEARCHER): str(AgentRole.RESEARCHER),
+                str(AgentRole.WRITER): str(AgentRole.WRITER),
+                str(AgentRole.EDITOR): str(AgentRole.EDITOR),
+                str(AgentRole.REVIEWER): str(AgentRole.REVIEWER),
+                str(AgentRole.END_NODE): END,
             },
         )
 
         workflow.add_conditional_edges(
-            "reviewer",
+            str(AgentRole.REVIEWER),
             handoff_router,
             {
-                "researcher": "researcher",
-                "writer": "writer",
-                "editor": "editor",
-                "reviewer": "reviewer",
-                "END": END,
+                str(AgentRole.RESEARCHER): str(AgentRole.RESEARCHER),
+                str(AgentRole.WRITER): str(AgentRole.WRITER),
+                str(AgentRole.EDITOR): str(AgentRole.EDITOR),
+                str(AgentRole.REVIEWER): str(AgentRole.REVIEWER),
+                str(AgentRole.END_NODE): END,
             },
         )
 
         # 编译工作流
+        checkpointer = self.checkpointer or MemorySaver()
+        return workflow.compile(checkpointer=checkpointer)
+
+    def build_with_tools(self) -> Any:
+        """
+        构建带工具的多智能体工作流图。
+
+        使用 ReAct agent 替代纯 LLM 节点，使 Agent 能调用真实工具：
+        - Coordinator：纯 LLM 推理（任务分解）
+        - Researcher：web_search + document_search + calculator + get_schema
+        - Writer：calculator + csv_processor + json_processor
+        - Editor：纯 LLM（内容优化）
+        - Reviewer：纯 LLM（质量审核）
+        - Database Query：text2sql + execute_sql + get_schema
+
+        Returns:
+            编译后的带工具 StateGraph
+        """
+        logger.info(f"构建带工具工作流: {self.name}")
+
+        workflow = StateGraph(MultiAgentState)
+
+        # 添加节点
+        workflow.add_node(str(AgentRole.COORDINATOR), coordinator_node)
+        workflow.add_node(str(AgentRole.RESEARCHER), create_researcher_with_tools())
+        workflow.add_node(str(AgentRole.WRITER), create_writer_with_tools())
+        workflow.add_node(str(AgentRole.EDITOR), editor_node)
+        workflow.add_node(str(AgentRole.REVIEWER), reviewer_node)
+        workflow.add_node("database_query", create_database_query_node())
+
+        # 设置入口点
+        workflow.set_entry_point(str(AgentRole.COORDINATOR))
+
+        # 条件边（与 build() 相同）
+        for agent in [
+            AgentRole.COORDINATOR,
+            AgentRole.RESEARCHER,
+            AgentRole.WRITER,
+            AgentRole.EDITOR,
+            AgentRole.REVIEWER,
+        ]:
+            workflow.add_conditional_edges(
+                str(agent),
+                handoff_router,
+                {
+                    str(AgentRole.RESEARCHER): str(AgentRole.RESEARCHER),
+                    str(AgentRole.WRITER): str(AgentRole.WRITER),
+                    str(AgentRole.EDITOR): str(AgentRole.EDITOR),
+                    str(AgentRole.REVIEWER): str(AgentRole.REVIEWER),
+                    str(AgentRole.END_NODE): END,
+                },
+            )
+
         checkpointer = self.checkpointer or MemorySaver()
         return workflow.compile(checkpointer=checkpointer)
 
@@ -194,7 +249,7 @@ class MultiAgentWorkflow(BaseWorkflow):
             "draft_content": "",
             "edited_content": "",
             "review_feedback": "",
-            "final_output": "",
+            "output": "",
             "current_stage": "init",
             "current_agent": None,
             "iteration_count": 0,
@@ -356,7 +411,7 @@ class MultiAgentWorkflow(BaseWorkflow):
         }
 
         # 获取最终输出
-        final_output = result.get("final_output", "")
+        final_output = result.get("output", "")
         if not final_output:
             final_output = result.get("edited_content", "")
 
@@ -365,7 +420,7 @@ class MultiAgentWorkflow(BaseWorkflow):
 
         return MultiAgentResult(
             original_request=request,
-            final_output=final_output,
+            output=final_output,
             tasks_completed=len(completed_tasks),
             tasks_total=len(tasks),
             iteration_count=result.get("iteration_count", 0),

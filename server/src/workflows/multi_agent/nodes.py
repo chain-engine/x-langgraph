@@ -20,7 +20,7 @@
 import re
 import time
 import uuid
-from typing import Optional, Callable
+from typing import Optional, Callable, Any
 
 from workflows.multi_agent.state import (
     MultiAgentState,
@@ -29,7 +29,12 @@ from workflows.multi_agent.state import (
     AgentOutput,
     AgentHandoff,
     AgentConfig,
+    AgentRole,
 )
+from tools.search_tools import web_search_tool, document_search_tool
+from tools.data_tools import csv_processor_tool, json_processor_tool
+from tools.calculation_tools import calculator_tool
+from tools.database_tools import text_to_sql_tool, execute_sql_tool, get_schema_tool
 
 from core.logger import logger
 from core.config import settings
@@ -38,40 +43,40 @@ from core.config import settings
 # ===== Agent 配置 =====
 
 DEFAULT_AGENT_CONFIGS = {
-    "coordinator": AgentConfig(
-        name="coordinator",
+    AgentRole.COORDINATOR: AgentConfig(
+        name=AgentRole.COORDINATOR,
         role="协调者",
         llm_provider="auto",
         llm_model="",
         system_prompt="你是一个专业的任务协调者。你的职责是：1. 分析用户的请求 2. 将复杂任务分解为可执行的子任务 3. 为每个子任务分配最合适的执行者",
         temperature=0.7,
     ),
-    "researcher": AgentConfig(
-        name="researcher",
+    AgentRole.RESEARCHER: AgentConfig(
+        name=AgentRole.RESEARCHER,
         role="研究员",
         llm_provider="auto",
         llm_model="",
         system_prompt="你是一个专业的研究员。你的职责是：1. 收集和整理与主题相关的信息 2. 分析数据的可靠性和相关性 3. 提供结构化的研究发现",
         temperature=0.7,
     ),
-    "writer": AgentConfig(
-        name="writer",
+    AgentRole.WRITER: AgentConfig(
+        name=AgentRole.WRITER,
         role="撰写者",
         llm_provider="auto",
         llm_model="",
         system_prompt="你是一个专业的内容撰写者。你的职责是：1. 基于研究结果撰写高质量内容 2. 确保内容结构清晰、逻辑连贯 3. 使用恰当的表达方式和格式",
         temperature=0.7,
     ),
-    "editor": AgentConfig(
-        name="editor",
+    AgentRole.EDITOR: AgentConfig(
+        name=AgentRole.EDITOR,
         role="编辑",
         llm_provider="auto",
         llm_model="",
         system_prompt="你是一个专业的编辑。你的职责是：1. 优化内容的结构和表达 2. 修正语法、拼写和格式错误 3. 提升内容的可读性和专业性",
         temperature=0.5,
     ),
-    "reviewer": AgentConfig(
-        name="reviewer",
+    AgentRole.REVIEWER: AgentConfig(
+        name=AgentRole.REVIEWER,
         role="审核员",
         llm_provider="auto",
         llm_model="",
@@ -198,11 +203,11 @@ def coordinator_node(state: MultiAgentState) -> dict:
         logger.info(f"Handoff: Coordinator 分解为 {len(tasks)} 个子任务")
 
         # 确定第一个 Handoff 目标
-        next_agent = "END"
+        next_agent = AgentRole.END_NODE
         handoff_reason = "所有任务已完成"
         if task_dicts:
             first_task = task_dicts[0]
-            next_agent = first_task.get("assigned_to", "END")
+            next_agent = first_task.get("assigned_to", AgentRole.END_NODE)
             handoff_reason = f"任务分配：{first_task.get('description', '')}"
 
         # 构建 Handoff
@@ -210,13 +215,13 @@ def coordinator_node(state: MultiAgentState) -> dict:
             to_agent=next_agent,
             reason=handoff_reason,
             context={"tasks": task_dicts},
-            from_agent="coordinator",
+            from_agent=AgentRole.COORDINATOR,
         )
 
         return {
             "tasks": task_dicts,
-            "current_stage": "coordinator",
-            "current_agent": "coordinator",
+            "current_stage": AgentRole.COORDINATOR,
+            "current_agent": AgentRole.COORDINATOR,
             "iteration_count": 0,
             "completed_tasks": [],
             "handoffs": [],
@@ -229,19 +234,19 @@ def coordinator_node(state: MultiAgentState) -> dict:
         logger.error(f"Handoff: Coordinator 任务分解失败 - {e}")
         tasks = _decompose_default(request)
         task_dicts = [task.model_dump() for task in tasks]
-        next_agent = task_dicts[0].get("assigned_to", "END") if task_dicts else "END"
+        next_agent = task_dicts[0].get("assigned_to", AgentRole.END_NODE) if task_dicts else AgentRole.END_NODE
 
         handoff = AgentHandoff(
             to_agent=next_agent,
             reason="默认任务分配",
             context={"tasks": task_dicts},
-            from_agent="coordinator",
+            from_agent=AgentRole.COORDINATOR,
         )
 
         return {
             "tasks": task_dicts,
-            "current_stage": "coordinator",
-            "current_agent": "coordinator",
+            "current_stage": AgentRole.COORDINATOR,
+            "current_agent": AgentRole.COORDINATOR,
             "active_handoff": handoff.model_dump(),
             "handoff_history": [handoff.model_dump()],
             "route": next_agent,
@@ -264,7 +269,7 @@ def _decompose_with_llm(request: str) -> list[SubTask]:
     """
     import json
 
-    config = DEFAULT_AGENT_CONFIGS.get("coordinator")
+    config = DEFAULT_AGENT_CONFIGS.get(AgentRole.COORDINATOR)
     llm = get_agent_llm(config)
 
     prompt = f"""{config.system_prompt}
@@ -302,8 +307,9 @@ def _decompose_with_llm(request: str) -> list[SubTask]:
         dependencies = task_data.get("dependencies", [])
         dep_ids = []
         for dep_name in dependencies:
+            dep_str = str(dep_name) if not isinstance(dep_name, str) else dep_name
             for prev_task in tasks:
-                if prev_task.description.startswith(dep_name):
+                if prev_task.description.startswith(dep_str):
                     dep_ids.append(prev_task.id)
                     break
 
@@ -311,7 +317,7 @@ def _decompose_with_llm(request: str) -> list[SubTask]:
             SubTask(
                 id=task_id,
                 description=task_data.get("description", ""),
-                assigned_to=task_data.get("assigned_to", "writer"),
+                assigned_to=task_data.get("assigned_to", AgentRole.WRITER),
                 status=TaskStatus.PENDING.value,
                 priority=task_data.get("priority", "medium"),
                 dependencies=dep_ids,
@@ -338,7 +344,7 @@ def _decompose_default(request: str) -> list[SubTask]:
         SubTask(
             id=research_id,
             description=f"研究主题：{request}",
-            assigned_to="researcher",
+            assigned_to=AgentRole.RESEARCHER,
             status=TaskStatus.PENDING.value,
         )
     )
@@ -348,7 +354,7 @@ def _decompose_default(request: str) -> list[SubTask]:
         SubTask(
             id=write_id,
             description="基于研究结果撰写内容",
-            assigned_to="writer",
+            assigned_to=AgentRole.WRITER,
             status=TaskStatus.PENDING.value,
             dependencies=[research_id],
         )
@@ -359,7 +365,7 @@ def _decompose_default(request: str) -> list[SubTask]:
         SubTask(
             id=edit_id,
             description="优化和完善内容",
-            assigned_to="editor",
+            assigned_to=AgentRole.EDITOR,
             status=TaskStatus.PENDING.value,
             dependencies=[write_id],
         )
@@ -370,7 +376,7 @@ def _decompose_default(request: str) -> list[SubTask]:
         SubTask(
             id=review_id,
             description="审核内容质量",
-            assigned_to="reviewer",
+            assigned_to=AgentRole.REVIEWER,
             status=TaskStatus.PENDING.value,
             dependencies=[edit_id],
         )
@@ -402,7 +408,7 @@ def researcher_node(state: MultiAgentState) -> dict:
     request = state.get("original_request", "")
 
     # 获取 Researcher 的独立 LLM
-    config = DEFAULT_AGENT_CONFIGS.get("researcher")
+    config = DEFAULT_AGENT_CONFIGS.get(AgentRole.RESEARCHER)
     llm = get_agent_llm(config)
 
     try:
@@ -432,17 +438,17 @@ def researcher_node(state: MultiAgentState) -> dict:
 
         # 更新任务状态
         tasks, completed_tasks = _update_task_status(
-            state, "researcher", findings
+            state, AgentRole.RESEARCHER, findings
         )
 
         # 决定下一步 Handoff
-        next_agent = _get_next_agent(state, "researcher", ["writer", "editor", "reviewer"])
+        next_agent = _get_next_agent(state, AgentRole.RESEARCHER, [AgentRole.WRITER, AgentRole.EDITOR, AgentRole.REVIEWER])
 
         handoff = AgentHandoff(
             to_agent=next_agent,
             reason="研究完成，需要进入下一个阶段",
             context={"research_findings": findings},
-            from_agent="researcher",
+            from_agent=AgentRole.RESEARCHER,
         )
 
         logger.info(f"Handoff: Researcher 完成，耗时 {duration}ms，下一步 → {next_agent}")
@@ -451,8 +457,8 @@ def researcher_node(state: MultiAgentState) -> dict:
             "research_findings": findings,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
-            "current_stage": "researcher",
-            "current_agent": "researcher",
+            "current_stage": AgentRole.RESEARCHER,
+            "current_agent": AgentRole.RESEARCHER,
             "active_handoff": handoff.model_dump(),
             "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
             "route": next_agent,
@@ -464,7 +470,7 @@ def researcher_node(state: MultiAgentState) -> dict:
             "research_findings": f"研究失败: {str(e)}",
             "error": f"研究阶段错误: {str(e)}",
             "active_handoff": None,
-            "route": "END",
+            "route": AgentRole.END_NODE,
         }
 
 
@@ -492,7 +498,7 @@ def writer_node(state: MultiAgentState) -> dict:
     research = state.get("research_findings", "")
 
     # 获取 Writer 的独立 LLM
-    config = DEFAULT_AGENT_CONFIGS.get("writer")
+    config = DEFAULT_AGENT_CONFIGS.get(AgentRole.WRITER)
     llm = get_agent_llm(config)
 
     try:
@@ -519,17 +525,17 @@ def writer_node(state: MultiAgentState) -> dict:
 
         # 更新任务状态
         tasks, completed_tasks = _update_task_status(
-            state, "writer", draft
+            state, AgentRole.WRITER, draft
         )
 
         # 决定下一步 Handoff
-        next_agent = _get_next_agent(state, "writer", ["editor", "reviewer"])
+        next_agent = _get_next_agent(state, AgentRole.WRITER, [AgentRole.EDITOR, AgentRole.REVIEWER])
 
         handoff = AgentHandoff(
             to_agent=next_agent,
             reason="撰写完成，需要进入编辑阶段",
             context={"draft_content": draft},
-            from_agent="writer",
+            from_agent=AgentRole.WRITER,
         )
 
         logger.info(f"Handoff: Writer 完成，耗时 {duration}ms，下一步 → {next_agent}")
@@ -538,8 +544,8 @@ def writer_node(state: MultiAgentState) -> dict:
             "draft_content": draft,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
-            "current_stage": "writer",
-            "current_agent": "writer",
+            "current_stage": AgentRole.WRITER,
+            "current_agent": AgentRole.WRITER,
             "active_handoff": handoff.model_dump(),
             "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
             "route": next_agent,
@@ -551,7 +557,7 @@ def writer_node(state: MultiAgentState) -> dict:
             "draft_content": f"撰写失败: {str(e)}",
             "error": f"撰写阶段错误: {str(e)}",
             "active_handoff": None,
-            "route": "END",
+            "route": AgentRole.END_NODE,
         }
 
 
@@ -579,7 +585,7 @@ def editor_node(state: MultiAgentState) -> dict:
     revision_requests = state.get("revision_requests", [])
 
     # 获取 Editor 的独立 LLM
-    config = DEFAULT_AGENT_CONFIGS.get("editor")
+    config = DEFAULT_AGENT_CONFIGS.get(AgentRole.EDITOR)
     llm = get_agent_llm(config)
 
     try:
@@ -610,17 +616,17 @@ def editor_node(state: MultiAgentState) -> dict:
 
         # 更新任务状态
         tasks, completed_tasks = _update_task_status(
-            state, "editor", edited
+            state, AgentRole.EDITOR, edited
         )
 
         # 编辑完成后总是进入审核
-        next_agent = "reviewer"
+        next_agent = AgentRole.REVIEWER
 
         handoff = AgentHandoff(
             to_agent=next_agent,
             reason="编辑优化完成，进入审核阶段",
             context={"edited_content": edited},
-            from_agent="editor",
+            from_agent=AgentRole.EDITOR,
         )
 
         logger.info(f"Handoff: Editor 完成，耗时 {duration}ms，下一步 → {next_agent}")
@@ -629,8 +635,8 @@ def editor_node(state: MultiAgentState) -> dict:
             "edited_content": edited,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
-            "current_stage": "editor",
-            "current_agent": "editor",
+            "current_stage": AgentRole.EDITOR,
+            "current_agent": AgentRole.EDITOR,
             "revision_requests": [],
             "active_handoff": handoff.model_dump(),
             "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
@@ -643,7 +649,7 @@ def editor_node(state: MultiAgentState) -> dict:
             "edited_content": draft,
             "error": f"编辑阶段错误: {str(e)}",
             "active_handoff": None,
-            "route": "END",
+            "route": AgentRole.END_NODE,
         }
 
 
@@ -672,7 +678,7 @@ def reviewer_node(state: MultiAgentState) -> dict:
     max_iterations = state.get("max_iterations", 3)
 
     # 获取 Reviewer 的独立 LLM
-    config = DEFAULT_AGENT_CONFIGS.get("reviewer")
+    config = DEFAULT_AGENT_CONFIGS.get(AgentRole.REVIEWER)
     llm = get_agent_llm(config)
 
     try:
@@ -698,7 +704,7 @@ def reviewer_node(state: MultiAgentState) -> dict:
 
         # 更新任务状态
         tasks, completed_tasks = _update_task_status(
-            state, "reviewer", review_result
+            state, AgentRole.REVIEWER, review_result
         )
 
         # 判断是否需要修订
@@ -710,14 +716,14 @@ def reviewer_node(state: MultiAgentState) -> dict:
             revision_requests = _extract_revision_requests(review_result)
 
         # 决定下一步 Handoff
-        next_agent = "editor" if needs_revision else "END"
+        next_agent = AgentRole.EDITOR if needs_revision else AgentRole.END_NODE
         handoff_reason = "内容需要修订" if needs_revision else "内容审核通过，流程结束"
 
         handoff = AgentHandoff(
             to_agent=next_agent,
             reason=handoff_reason,
             context={"review_feedback": review_result, "needs_revision": needs_revision},
-            from_agent="reviewer",
+            from_agent=AgentRole.REVIEWER,
         )
 
         logger.info(f"Handoff: Reviewer 完成，{'需要修订' if needs_revision else '通过'}，下一步 → {next_agent}")
@@ -726,12 +732,12 @@ def reviewer_node(state: MultiAgentState) -> dict:
             "review_feedback": review_result,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
-            "current_stage": "reviewer",
-            "current_agent": "reviewer",
+            "current_stage": AgentRole.REVIEWER,
+            "current_agent": AgentRole.REVIEWER,
             "needs_revision": needs_revision,
             "revision_requests": revision_requests,
             "iteration_count": iteration_count + 1,
-            "final_output": edited_content if not needs_revision else "",
+            "output": edited_content if not needs_revision else "",
             "active_handoff": handoff.model_dump(),
             "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
             "route": next_agent,
@@ -742,9 +748,9 @@ def reviewer_node(state: MultiAgentState) -> dict:
         return {
             "review_feedback": f"审核失败: {str(e)}",
             "error": f"审核阶段错误: {str(e)}",
-            "final_output": edited_content,
+            "output": edited_content,
             "active_handoff": None,
-            "route": "END",
+            "route": AgentRole.END_NODE,
         }
 
 
@@ -793,7 +799,7 @@ def _extract_revision_requests(review: str) -> list[str]:
 
 
 def _update_task_status(
-    state: MultiAgentState, agent_role: str, result: str
+    state: MultiAgentState, agent_role: AgentRole | str, result: str
 ) -> tuple[list[dict], list[str]]:
     """
     更新任务状态
@@ -806,11 +812,12 @@ def _update_task_status(
     Returns:
         (更新后的 tasks, 更新后的 completed_tasks)
     """
+    role_str = agent_role.value if isinstance(agent_role, AgentRole) else agent_role
     tasks = state.get("tasks", [])
     completed_tasks = list(state.get("completed_tasks", []))
 
     for task_dict in tasks:
-        if task_dict.get("assigned_to") == agent_role:
+        if task_dict.get("assigned_to") == role_str:
             task_id = task_dict.get("id")
             if task_id not in completed_tasks:
                 task_dict["status"] = TaskStatus.COMPLETED.value
@@ -820,8 +827,10 @@ def _update_task_status(
 
     return tasks, completed_tasks
 
+    return tasks, completed_tasks
 
-def _get_next_agent(state: MultiAgentState, completed_agent: str, candidates: list[str]) -> str:
+
+def _get_next_agent(state: MultiAgentState, completed_agent: AgentRole | str, candidates: list[AgentRole | str]) -> str:
     """
     根据已完成的任务确定下一个 Handoff 目标
 
@@ -831,24 +840,26 @@ def _get_next_agent(state: MultiAgentState, completed_agent: str, candidates: li
         candidates: 候选的下一个 Agent 列表
 
     Returns:
-        下一个 Agent 名称或 "END"
+        下一个 Agent 名称或 AgentRole.END_NODE
     """
+    completed_str = completed_agent.value if isinstance(completed_agent, AgentRole) else completed_agent
     tasks = state.get("tasks", [])
     completed_tasks = set(state.get("completed_tasks", []))
-    completed_tasks.add(completed_agent)
+    completed_tasks.add(completed_str)
 
     # 按顺序查找下一个未完成的任务
     for agent in candidates:
-        if agent == completed_agent:
+        agent_str = agent.value if isinstance(agent, AgentRole) else agent
+        if agent_str == completed_str:
             continue
         for task in tasks:
-            if task.get("assigned_to") == agent and task.get("id") not in completed_tasks:
-                return agent
+            if task.get("assigned_to") == agent_str and task.get("id") not in completed_tasks:
+                return agent_str
 
-    return "END"
+    return AgentRole.END_NODE
 
 
-def _get_next_route(state: MultiAgentState, completed_role: str) -> str:
+def _get_next_route(state: MultiAgentState, completed_role: AgentRole | str) -> str:
     """
     根据已完成的任务确定下一个路由目标（兼容旧代码）
 
@@ -857,9 +868,12 @@ def _get_next_route(state: MultiAgentState, completed_role: str) -> str:
         completed_role: 已完成任务的角色
 
     Returns:
-        下一个路由目标（agent 名称或 "complete"）
+        下一个路由目标（agent 名称或 AgentRole.END_NODE）
     """
-    return _get_next_agent(state, completed_role, ["researcher", "writer", "editor", "reviewer"])
+    return _get_next_agent(
+        state, completed_role,
+        [AgentRole.RESEARCHER, AgentRole.WRITER, AgentRole.EDITOR, AgentRole.REVIEWER]
+    )
 
 
 # ===== 条件路由函数 =====
@@ -882,7 +896,7 @@ def handoff_router(state: MultiAgentState) -> str:
     handoff = state.get("active_handoff")
 
     if handoff:
-        next_agent = handoff.get("to_agent", "END")
+        next_agent = handoff.get("to_agent", AgentRole.END_NODE)
         logger.info(f"Handoff Router: {handoff.get('from_agent', 'unknown')} → {next_agent} ({handoff.get('reason', '')})")
         return next_agent
 
@@ -900,7 +914,7 @@ def handoff_router(state: MultiAgentState) -> str:
             agent = task_dict.get("assigned_to")
             return agent
 
-    return "END"
+    return AgentRole.END_NODE
 
 
 def route_to_agent_node(state: MultiAgentState) -> str:
@@ -924,7 +938,7 @@ def route_to_agent_node(state: MultiAgentState) -> str:
 
     # 检查是否需要修订（回到编辑）
     if state.get("needs_revision", False):
-        return "editor"
+        return AgentRole.EDITOR
 
     # 找到下一个可执行的任务
     for task_dict in tasks:
@@ -937,7 +951,7 @@ def route_to_agent_node(state: MultiAgentState) -> str:
             agent = task_dict.get("assigned_to")
             return agent
 
-    return "END"
+    return AgentRole.END_NODE
 
 
 # ===== 已实现：并行执行路由 =====
@@ -1027,14 +1041,14 @@ def route_with_handoff(state: MultiAgentState) -> str:
     # 1. 优先使用 active_handoff（每个 Agent 执行后设置的）
     active_handoff = state.get("active_handoff")
     if active_handoff:
-        to_agent = active_handoff.get("to_agent", "END")
+        to_agent = active_handoff.get("to_agent", AgentRole.END_NODE)
         logger.info(f"Handoff: {active_handoff.get('from_agent', 'unknown')} → {to_agent} ({active_handoff.get('reason', '')})")
         return to_agent
 
     # 2. 检查 pending_handoff
     pending_handoff = state.get("pending_handoff")
     if pending_handoff:
-        return pending_handoff.get("to_agent", "END")
+        return pending_handoff.get("to_agent", AgentRole.END_NODE)
 
     # 3. 降级到基于任务依赖的路由
     return route_to_agent_node(state)
@@ -1086,82 +1100,202 @@ def should_parallel_execute(state: MultiAgentState) -> bool:
     return len(parallel_ids) >= 2
 
 
-# ===== 预留：Tool Calling 绑定 =====
+# ===== Tool Calling 实现 =====
 
-def bind_tools_to_agent(tools: list):
+
+def create_researcher_with_tools():
     """
-    为 Agent 绑定工具（预留实现）
+    创建带工具的研究员节点。
 
-    用于给 Agent 添加工具调用能力。
-
-    Args:
-        tools: 工具列表
-
-    Returns:
-        绑定工具后的 LLM
-    """
-    config = DEFAULT_AGENT_CONFIGS.get("coordinator")
-    llm = get_agent_llm(config)
-    return llm.bind_tools(tools)
-
-
-def create_researcher_with_tools(tools: list):
-    """
-    创建带工具的研究员（预留实现）
-
-    Args:
-        tools: 工具列表（如搜索工具）
+    使用 create_react_agent 实现完整的 ReAct 推理循环，
+    支持 web_search / document_search / calculator / get_schema / execute_sql 工具。
 
     Returns:
         带工具的研究员节点函数
     """
+    from langgraph.prebuilt import create_react_agent
+
+    tools = [web_search_tool, document_search_tool, calculator_tool, get_schema_tool]
+    model = get_agent_llm(DEFAULT_AGENT_CONFIGS[AgentRole.RESEARCHER])
+    agent = create_react_agent(model, tools)
+
     def researcher_with_tools(state: MultiAgentState) -> dict:
         """带工具的研究员节点"""
-        logger.info("Handoff: Researcher（带工具）开始工作")
+        logger.info("Researcher（带工具）开始工作")
 
         request = state.get("original_request", "")
-        config = DEFAULT_AGENT_CONFIGS.get("researcher")
-        llm = get_agent_llm(config)
-        model = llm.bind_tools(tools)
+        messages = [{"role": "user", "content": f"研究主题：{request}"}]
 
         try:
-            system_prompt = f"{config.system_prompt}\n\n你可以使用搜索工具获取最新信息。"
+            response = agent.invoke({"messages": messages})
+            findings = _extract_agent_response(response)
 
-            response = model.invoke([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"研究主题：{request}"},
-            ])
-
-            findings = response.content if hasattr(response, "content") else str(response)
-
-            tasks, completed_tasks = _update_task_status(state, "researcher", findings)
-            next_agent = _get_next_agent(state, "researcher", ["writer", "editor", "reviewer"])
+            tasks, completed_tasks = _update_task_status(state, AgentRole.RESEARCHER, findings)
+            next_agent = _get_next_agent(state, AgentRole.RESEARCHER, [AgentRole.WRITER, AgentRole.EDITOR, AgentRole.REVIEWER])
 
             handoff = AgentHandoff(
                 to_agent=next_agent,
                 reason="研究完成，需要进入下一个阶段",
                 context={"research_findings": findings},
-                from_agent="researcher",
+                from_agent=AgentRole.RESEARCHER,
             )
 
             return {
                 "research_findings": findings,
                 "tasks": tasks,
                 "completed_tasks": completed_tasks,
-                "current_stage": "researcher",
-                "current_agent": "researcher",
+                "current_stage": AgentRole.RESEARCHER,
+                "current_agent": AgentRole.RESEARCHER,
                 "active_handoff": handoff.model_dump(),
                 "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
                 "route": next_agent,
             }
 
         except Exception as e:
-            logger.error(f"Handoff: Researcher（带工具）失败 - {e}")
+            logger.error(f"Researcher（带工具）失败 - {e}")
             return {
                 "research_findings": f"研究失败: {str(e)}",
                 "error": str(e),
                 "active_handoff": None,
-                "route": "END",
+                "route": AgentRole.END_NODE,
             }
 
     return researcher_with_tools
+
+
+def create_writer_with_tools():
+    """
+    创建带工具的撰写者节点。
+
+    支持 calculator / csv_processor / json_processor 工具，
+    让撰写者在内容中加入实时计算结果和数据引用。
+
+    Returns:
+        带工具的撰写者节点函数
+    """
+    from langgraph.prebuilt import create_react_agent
+
+    tools = [calculator_tool, csv_processor_tool, json_processor_tool]
+    model = get_agent_llm(DEFAULT_AGENT_CONFIGS[AgentRole.WRITER])
+    agent = create_react_agent(model, tools)
+
+    def writer_with_tools(state: MultiAgentState) -> dict:
+        """带工具的撰写者节点"""
+        logger.info("Writer（带工具）开始工作")
+
+        request = state.get("original_request", "")
+        findings = state.get("research_findings", "")
+        prompt = f"""原始请求：{request}
+
+已有研究发现：
+{findings}
+
+请基于以上信息撰写高质量的内容。"""
+        messages = [{"role": "user", "content": prompt}]
+
+        try:
+            response = agent.invoke({"messages": messages})
+            draft = _extract_agent_response(response)
+
+            tasks, completed_tasks = _update_task_status(state, AgentRole.WRITER, draft)
+            next_agent = _get_next_agent(state, AgentRole.WRITER, [AgentRole.EDITOR, AgentRole.REVIEWER])
+
+            handoff = AgentHandoff(
+                to_agent=next_agent,
+                reason="撰写完成，需要进入编辑阶段",
+                context={"draft_content": draft},
+                from_agent=AgentRole.WRITER,
+            )
+
+            return {
+                "draft_content": draft,
+                "tasks": tasks,
+                "completed_tasks": completed_tasks,
+                "current_stage": AgentRole.WRITER,
+                "current_agent": AgentRole.WRITER,
+                "active_handoff": handoff.model_dump(),
+                "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
+                "route": next_agent,
+            }
+
+        except Exception as e:
+            logger.error(f"Writer（带工具）失败 - {e}")
+            return {
+                "draft_content": f"撰写失败: {str(e)}",
+                "error": str(e),
+                "active_handoff": None,
+                "route": AgentRole.END_NODE,
+            }
+
+    return writer_with_tools
+
+
+def create_database_query_node():
+    """
+    创建数据库查询节点。
+
+    使用 text2sql 工具将自然语言转换为 SQL，
+    然后执行查询并返回结构化结果。
+
+    Returns:
+        数据库查询节点函数
+    """
+    from langgraph.prebuilt import create_react_agent
+
+    tools = [text_to_sql_tool, execute_sql_tool, get_schema_tool]
+    model = get_agent_llm(DEFAULT_AGENT_CONFIGS[AgentRole.RESEARCHER])
+    agent = create_react_agent(model, tools)
+
+    def database_query_node(state: MultiAgentState) -> dict:
+        """数据库查询节点"""
+        logger.info("Database Query 开始工作")
+
+        request = state.get("original_request", "")
+        messages = [{"role": "user", "content": f"请帮我查询数据库：{request}"}]
+
+        try:
+            response = agent.invoke({"messages": messages})
+            query_result = _extract_agent_response(response)
+
+            next_agent = _get_next_agent(state, AgentRole.RESEARCHER, [AgentRole.WRITER, AgentRole.EDITOR, AgentRole.REVIEWER])
+
+            handoff = AgentHandoff(
+                to_agent=next_agent,
+                reason="数据库查询完成",
+                context={"db_query_result": query_result},
+                from_agent=AgentRole.RESEARCHER,
+            )
+
+            return {
+                "research_findings": state.get("research_findings", "") + f"\n\n[数据库查询结果]\n{query_result}",
+                "tasks": state.get("tasks", []),
+                "completed_tasks": state.get("completed_tasks", []),
+                "current_stage": AgentRole.RESEARCHER,
+                "current_agent": AgentRole.RESEARCHER,
+                "active_handoff": handoff.model_dump(),
+                "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
+                "route": next_agent,
+            }
+
+        except Exception as e:
+            logger.error(f"Database Query 失败 - {e}")
+            return {
+                "error": f"数据库查询失败: {str(e)}",
+                "route": AgentRole.END_NODE,
+            }
+
+    return database_query_node
+
+
+def _extract_agent_response(response: Any) -> str:
+    """从 ReAct agent 响应中提取文本内容"""
+    if hasattr(response, "messages"):
+        messages = list(response.messages)
+        if messages:
+            last = messages[-1]
+            if hasattr(last, "content"):
+                return last.content
+            return str(last)
+    if hasattr(response, "content"):
+        return response.content
+    return str(response)

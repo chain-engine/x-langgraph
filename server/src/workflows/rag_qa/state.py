@@ -37,7 +37,7 @@ class RAGQAState(TypedDict):
 
     # 生成阶段
     context: str  # 构建的上下文
-    answer: str  # 生成的回答
+    output: str  # 最终回答
 
     # 来源追踪
     sources: list[str]  # 引用来源
@@ -55,7 +55,7 @@ class RAGQAResult(BaseModel):
     """RAG 问答结果"""
 
     question: str = Field(..., description="用户问题")
-    answer: str = Field(default="", description="生成的回答")
+    output: str = Field(default="", description="生成的回答")
     sources: list[str] = Field(default_factory=list, description="引用来源")
     retrieved_docs_count: int = Field(default=0, description="检索到的文档数量")
     retrieval_score: Optional[float] = Field(default=None, description="平均检索分数")

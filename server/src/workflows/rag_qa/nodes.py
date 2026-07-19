@@ -82,7 +82,7 @@ def init_node(state: RAGQAState) -> dict:
         "retrieved_docs": [],
         "retrieval_score": None,
         "context": "",
-        "answer": "",
+        "output": "",
         "sources": [],
         "needs_clarification": False,
         "clarification_question": None,
@@ -213,7 +213,7 @@ def generate_node(state: RAGQAState) -> dict:
         logger.info(f"RAG: 生成完成 - {len(answer)} 字符")
 
         return {
-            "answer": answer,
+            "output": answer,
             "stage": "complete",
         }
 
@@ -224,7 +224,7 @@ def generate_node(state: RAGQAState) -> dict:
         fallback_answer = _generate_fallback_answer(question, context)
 
         return {
-            "answer": fallback_answer,
+            "output": fallback_answer,
             "stage": "complete",
             "error": f"LLM 调用失败，使用降级回答: {str(e)}",
         }
