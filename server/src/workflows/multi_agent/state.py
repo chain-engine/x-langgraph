@@ -55,6 +55,30 @@ class TaskPriority(str, Enum):
     URGENT = "urgent"
 
 
+class AgentHandoff(BaseModel):
+    """
+    Agent Handoff 协议结构
+
+    当一个 Agent 完成工作后，主动决定将控制权传递给下一个 Agent。
+    """
+
+    to_agent: str = Field(..., description="目标 Agent 名称")
+    reason: str = Field(default="", description="交接原因")
+    context: dict = Field(default_factory=dict, description="传递给下一个 Agent 的上下文")
+    from_agent: str = Field(default="", description="来源 Agent")
+
+
+class AgentConfig(BaseModel):
+    """Agent 配置"""
+
+    name: str = Field(..., description="Agent 名称")
+    role: str = Field(..., description="Agent 角色")
+    llm_provider: str = Field(default="auto", description="LLM 提供者")
+    llm_model: str = Field(default="", description="LLM 模型")
+    system_prompt: str = Field(default="", description="系统提示词")
+    temperature: float = Field(default=0.7, description="温度参数")
+
+
 class HandoffInfo(BaseModel):
     """
     Handoff 信息（预留）
@@ -136,13 +160,19 @@ class MultiAgentState(TypedDict):
     needs_revision: bool  # 是否需要修订
     revision_requests: list[str]  # 修订请求列表
 
-    # ===== Handoff 预留 =====
+    # ===== Handoff 支持 =====
     handoffs: list[dict]  # Handoff 历史记录
     pending_handoff: Optional[dict]  # 待处理的 Handoff
 
+    # Agent Handoff 协议
+    active_handoff: Optional[dict]  # 当前活跃的 Handoff
+    handoff_history: list[dict]  # Handoff 历史
+    agent_configs: dict[str, dict]  # Agent 配置映射
+
     # ===== 团队协作预留 =====
-    # team_members: list[str]  # 团队成员
-    # parallel_tasks: list[str]  # 可并行执行的任务
+    parallel_tasks: list[dict]  # 可并行执行的任务列表
+    parallel_execution: bool  # 是否启用并行执行模式
+    parallel_results: dict[str, str]  # 并行执行结果
 
     # ===== 错误处理 =====
     error: Optional[str]

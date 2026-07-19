@@ -9,10 +9,12 @@
 - 编辑：内容优化（LLM 优化）
 - 审核员：质量控制（LLM 审核）
 
-预留接口：
-- Handoff 机制（handoff_to_agent 函数）
-- 团队协作（parallel_execute 标记）
+已实现：
+- Handoff 机制（Agent 自主决定下一步）
 - Tool Calling（bind_tools 支持）
+
+预留接口：
+- 团队协作（parallel_execute 标记）
 """
 
 import re
@@ -22,256 +24,89 @@ from typing import Optional, Callable
 
 from workflows.multi_agent.state import (
     MultiAgentState,
-    AgentRole,
     TaskStatus,
     SubTask,
-    HandoffInfo,
     AgentOutput,
+    AgentHandoff,
+    AgentConfig,
 )
 
 from core.logger import logger
 from core.config import settings
 
 
-# ===== System Prompts =====
-
-COORDINATOR_PROMPT = """你是一个专业的任务协调者。你的职责是：
-1. 分析用户的请求
-2. 将复杂任务分解为可执行的子任务
-3. 为每个子任务分配最合适的执行者
-
-可用角色：researcher（研究员）、writer（撰写者）、editor（编辑）、reviewer（审核员）
-
-请将用户请求分解为 2-4 个逻辑清晰的子任务，并按依赖关系排序。
-返回 JSON 格式：
-{
-    "tasks": [
-        {
-            "description": "任务描述",
-            "assigned_to": "角色名",
-            "priority": "high/medium/low",
-            "dependencies": []
-        }
-    ],
-    "reasoning": "分解理由"
-}"""
-
-RESEARCHER_PROMPT = """你是一个专业的研究员。你的职责是：
-1. 收集和整理与主题相关的信息
-2. 分析数据的可靠性和相关性
-3. 提供结构化的研究发现
-
-请提供全面、客观、有据可查的研究结果。"""
-
-WRITER_PROMPT = """你是一个专业的内容撰写者。你的职责是：
-1. 基于研究结果撰写高质量内容
-2. 确保内容结构清晰、逻辑连贯
-3. 使用恰当的表达方式和格式
-
-请撰写专业、流畅、有价值的内容。"""
-
-EDITOR_PROMPT = """你是一个专业的编辑。你的职责是：
-1. 优化内容的结构和表达
-2. 修正语法、拼写和格式错误
-3. 提升内容的可读性和专业性
-
-请对内容进行精炼和优化。"""
-
-REVIEWER_PROMPT = """你是一个严格的质量审核员。你的职责是：
-1. 检查内容的完整性和准确性
-2. 评估内容的质量和价值
-3. 提供具体的改进建议
-
-请进行严格审核，如果需要修订请明确指出问题。"""
-
-
-# ===== LLM 调用辅助函数 =====
-
-def _get_llm_provider():
-    """获取可用的 LLM 提供者"""
-    from llms.providers import get_llm_provider
-
-    provider_name = settings.get_available_provider()
-    return get_llm_provider(provider_name)
-
-
-def _invoke_llm(
-    system_prompt: str,
-    user_input: str,
-    structured: bool = False,
-    use_mock_on_error: bool = True,
-) -> str:
-    """
-    调用 LLM 生成内容（带超时和降级）
-
-    Args:
-        system_prompt: 系统提示词
-        user_input: 用户输入
-        structured: 是否结构化输出
-        use_mock_on_error: 连接失败时是否使用模拟响应
-
-    Returns:
-        LLM 生成的响应内容
-    """
-    from langchain_core.messages import HumanMessage, SystemMessage
-
-    provider = _get_llm_provider()
-    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_input)]
-
-    max_retries = 1  # 减少重试次数避免长时间等待
-    timeout = 10  # 秒
-
-    for attempt in range(max_retries):
-        try:
-            logger.info(f"LLM 调用尝试 {attempt + 1}/{max_retries}")
-            response = provider.invoke(messages)
-            return response.content
-        except Exception as e:
-            logger.warning(f"LLM 调用失败 (尝试 {attempt + 1}): {e}")
-            if attempt < max_retries - 1:
-                continue
-
-            # 连接失败，降级到模拟响应
-            if use_mock_on_error:
-                logger.info("降级到模拟响应")
-                return _generate_mock_response(system_prompt, user_input)
-
-            raise
-
-
-def _generate_mock_response(system_prompt: str, user_input: str) -> str:
-    """
-    生成模拟响应（当 LLM 不可用时）
-
-    Args:
-        system_prompt: 系统提示词
-        user_input: 用户输入
-
-    Returns:
-        模拟的响应内容
-    """
-    # 根据系统提示词判断需要的响应类型
-    if "协调者" in system_prompt or "任务分解" in system_prompt:
-        # 协调者角色 - 返回任务分解
-        import json
-        return json.dumps({
-            "tasks": [
-                {"description": f"研究主题：{user_input}", "assigned_to": "researcher", "priority": "high", "dependencies": []},
-                {"description": "基于研究结果撰写内容", "assigned_to": "writer", "priority": "high", "dependencies": ["研究主题"]},
-                {"description": "优化和完善内容", "assigned_to": "editor", "priority": "medium", "dependencies": ["撰写内容"]},
-                {"description": "审核内容质量", "assigned_to": "reviewer", "priority": "medium", "dependencies": ["优化内容"]},
-            ],
-            "reasoning": "模拟：标准的多阶段内容创作流程"
-        }, ensure_ascii=False, indent=2)
-
-    elif "研究员" in system_prompt or "研究" in system_prompt:
-        return f"""## 关于「{user_input}」的研究报告
-
-### 背景信息
-该主题涉及多个重要领域，目前正处于快速发展阶段。
-
-### 关键发现
-1. **趋势一**：相关技术正在快速演进
-2. **趋势二**：存在多种可行的解决方案
-3. **趋势三**：实际应用中需要综合考虑多方面因素
-
-### 数据支持
-- 行业增长率呈上升趋势
-- 市场需求持续增长
-- 技术成熟度逐步提高
-
-### 建议
-1. 建议采用渐进式实施策略
-2. 关注风险控制和合规性
-3. 进行小规模试点验证"""
-
-    elif "撰写" in system_prompt or "内容" in system_prompt:
-        return f"""# {user_input}
-
-## 概述
-
-本文档对 {user_input} 进行深入分析和讨论。
-
-## 主要内容
-
-### 一、背景介绍
-
-随着技术发展，{user_input} 已成为重要议题。
-
-### 二、核心要点
-
-1. **要点一**：相关技术已经成熟
-2. **要点二**：需要关注实施风险
-3. **要点三**：建议渐进式推进
-
-### 三、实施建议
-
-1. 进行小规模试点
-2. 收集反馈并优化
-3. 逐步扩大应用范围
-
-### 四、结论
-
-综上所述，{user_input} 具有良好的发展前景。
-
----
-*（本内容由 AI 自动生成）*"""
-
-    elif "编辑" in system_prompt or "优化" in system_prompt:
-        return f"""# {user_input}
-
-## 概述
-
-本文档对 {user_input} 进行优化和完善。
-
-## 优化后的内容
-
-### 一、简介
-
-经过优化，内容更加清晰、结构更加合理。
-
-### 二、主要改进
-
-1. 语言表达更加精炼
-2. 结构层次更加分明
-3. 逻辑关系更加清晰
-
-### 三、结论
-
-优化后的内容质量显著提升，阅读体验更好。
-
----
-*（已编辑优化）*"""
-
-    elif "审核" in system_prompt or "质量" in system_prompt:
-        # 模拟审核 - 大部分情况通过
-        import random
-        if random.random() > 0.3:
-            return """## 审核报告
-
-**审核结果：通过**
-
-内容质量评估：
-- 完整性：良好
-- 准确性：良好
-- 可读性：良好
-
-建议：内容质量良好，可以直接使用。"""
-        else:
-            return """## 审核报告
-
-**审核结果：需要修订**
-
-发现以下问题：
-1. 建议增加更多具体案例
-2. 部分表述可以更加精炼
-3. 可以补充总结部分
-
-请根据以上建议进行修订后重新提交。"""
-
-    # 默认响应
-    return f"模拟响应：已收到您的请求 - {user_input[:50]}..."
-
+# ===== Agent 配置 =====
+
+DEFAULT_AGENT_CONFIGS = {
+    "coordinator": AgentConfig(
+        name="coordinator",
+        role="协调者",
+        llm_provider="auto",
+        llm_model="",
+        system_prompt="你是一个专业的任务协调者。你的职责是：1. 分析用户的请求 2. 将复杂任务分解为可执行的子任务 3. 为每个子任务分配最合适的执行者",
+        temperature=0.7,
+    ),
+    "researcher": AgentConfig(
+        name="researcher",
+        role="研究员",
+        llm_provider="auto",
+        llm_model="",
+        system_prompt="你是一个专业的研究员。你的职责是：1. 收集和整理与主题相关的信息 2. 分析数据的可靠性和相关性 3. 提供结构化的研究发现",
+        temperature=0.7,
+    ),
+    "writer": AgentConfig(
+        name="writer",
+        role="撰写者",
+        llm_provider="auto",
+        llm_model="",
+        system_prompt="你是一个专业的内容撰写者。你的职责是：1. 基于研究结果撰写高质量内容 2. 确保内容结构清晰、逻辑连贯 3. 使用恰当的表达方式和格式",
+        temperature=0.7,
+    ),
+    "editor": AgentConfig(
+        name="editor",
+        role="编辑",
+        llm_provider="auto",
+        llm_model="",
+        system_prompt="你是一个专业的编辑。你的职责是：1. 优化内容的结构和表达 2. 修正语法、拼写和格式错误 3. 提升内容的可读性和专业性",
+        temperature=0.5,
+    ),
+    "reviewer": AgentConfig(
+        name="reviewer",
+        role="审核员",
+        llm_provider="auto",
+        llm_model="",
+        system_prompt="你是一个严格的质量审核员。你的职责是：1. 检查内容的完整性和准确性 2. 评估内容的质量和价值 3. 提供具体的改进建议",
+        temperature=0.3,
+    ),
+}
+
+
+# ===== Agent LLM 缓存 =====
+
+_agent_llms: dict[str, any] = {}
+
+
+def get_agent_llm(config: AgentConfig):
+    """获取 Agent 的 LLM 实例（带缓存）"""
+    cache_key = f"{config.name}_{config.llm_provider}_{config.llm_model}"
+
+    if cache_key not in _agent_llms:
+        from llms.providers import get_llm_provider
+
+        provider_name = config.llm_provider if config.llm_provider != "auto" else settings.get_available_provider()
+        _agent_llms[cache_key] = get_llm_provider(provider_name)
+        logger.info(f"Agent [{config.name}] 使用 LLM: {provider_name}")
+
+    return _agent_llms[cache_key]
+
+
+def clear_agent_llm_cache():
+    """清除 LLM 缓存"""
+    global _agent_llms
+    _agent_llms = {}
+
+
+# ===== 任务分解（协调者）=====
 
 def _parse_json_response(text: str, default: str = "") -> str:
     """从 LLM 响应中提取 JSON"""
@@ -285,14 +120,11 @@ def _parse_json_response(text: str, default: str = "") -> str:
     return default or text
 
 
-# ===== Handoff 预留函数 =====
+# ===== Handoff 工具函数 =====
 
-def create_handoff(to_agent: str, from_agent: str, context: dict, reason: str = "") -> HandoffInfo:
+def create_handoff(to_agent: str, from_agent: str, context: dict, reason: str = "") -> AgentHandoff:
     """
-    创建 Handoff 信息（预留接口）
-
-    用于 Agent 之间传递控制权。
-    当需要实现 Handoff 模式时使用此函数。
+    创建 Handoff
 
     Args:
         to_agent: 目标 Agent
@@ -301,22 +133,21 @@ def create_handoff(to_agent: str, from_agent: str, context: dict, reason: str = 
         reason: 交接原因
 
     Returns:
-        HandoffInfo 对象
+        AgentHandoff 对象
     """
-    return HandoffInfo(
+    return AgentHandoff(
         from_agent=from_agent,
         to_agent=to_agent,
         reason=reason,
         context=context,
-        priority="medium",
     )
 
 
-def execute_handoff(state: MultiAgentState, handoff: HandoffInfo) -> dict:
+def execute_handoff(state: MultiAgentState, handoff: AgentHandoff) -> dict:
     """
-    执行 Handoff（预留实现）
+    执行 Handoff
 
-    在 Handoff 模式下，将控制权传递给目标 Agent。
+    将控制权传递给目标 Agent。
 
     Args:
         state: 当前状态
@@ -345,15 +176,15 @@ def coordinator_node(state: MultiAgentState) -> dict:
     职责：
     1. 分析用户请求
     2. 使用 LLM 动态分解为子任务
-    3. 分配给合适的智能体
+    3. 决定第一个执行者（通过 Handoff）
 
     Args:
         state: 当前状态
 
     Returns:
-        状态更新
+        状态更新，包含 Handoff 指令
     """
-    logger.info("Multi-Agent: 协调者分析任务")
+    logger.info("Handoff: Coordinator 开始分析任务")
 
     request = state.get("original_request", "")
 
@@ -364,36 +195,56 @@ def coordinator_node(state: MultiAgentState) -> dict:
         # 序列化任务
         task_dicts = [task.model_dump() for task in tasks]
 
-        logger.info(f"Multi-Agent: 分解为 {len(tasks)} 个子任务")
+        logger.info(f"Handoff: Coordinator 分解为 {len(tasks)} 个子任务")
 
-        # 确定下一步路由：使用第一个任务的 assigned_to
-        route_target = "complete"
+        # 确定第一个 Handoff 目标
+        next_agent = "END"
+        handoff_reason = "所有任务已完成"
         if task_dicts:
             first_task = task_dicts[0]
-            route_target = first_task.get("assigned_to", "complete")
-            logger.info(f"Multi-Agent: 首个任务分配给 {route_target}")
+            next_agent = first_task.get("assigned_to", "END")
+            handoff_reason = f"任务分配：{first_task.get('description', '')}"
+
+        # 构建 Handoff
+        handoff = AgentHandoff(
+            to_agent=next_agent,
+            reason=handoff_reason,
+            context={"tasks": task_dicts},
+            from_agent="coordinator",
+        )
 
         return {
             "tasks": task_dicts,
             "current_stage": "coordinator",
-            "current_agent": AgentRole.COORDINATOR.value,
+            "current_agent": "coordinator",
             "iteration_count": 0,
             "completed_tasks": [],
             "handoffs": [],
-            "route": route_target,
+            "active_handoff": handoff.model_dump(),
+            "handoff_history": [handoff.model_dump()],
+            "route": next_agent,
         }
 
     except Exception as e:
-        logger.error(f"Multi-Agent: 任务分解失败 - {e}")
-        # 降级到默认分解
+        logger.error(f"Handoff: Coordinator 任务分解失败 - {e}")
         tasks = _decompose_default(request)
         task_dicts = [task.model_dump() for task in tasks]
-        route_target = task_dicts[0].get("assigned_to", "complete") if task_dicts else "complete"
+        next_agent = task_dicts[0].get("assigned_to", "END") if task_dicts else "END"
+
+        handoff = AgentHandoff(
+            to_agent=next_agent,
+            reason="默认任务分配",
+            context={"tasks": task_dicts},
+            from_agent="coordinator",
+        )
+
         return {
             "tasks": task_dicts,
             "current_stage": "coordinator",
-            "current_agent": AgentRole.COORDINATOR.value,
-            "route": route_target,
+            "current_agent": "coordinator",
+            "active_handoff": handoff.model_dump(),
+            "handoff_history": [handoff.model_dump()],
+            "route": next_agent,
             "error": str(e),
         }
 
@@ -407,53 +258,72 @@ def _decompose_with_llm(request: str) -> list[SubTask]:
 
     Returns:
         子任务列表
+
+    Raises:
+        Exception: LLM 调用失败时抛出异常
     """
     import json
 
-    try:
-        response = _invoke_llm(COORDINATOR_PROMPT, request)
-        data = json.loads(_parse_json_response(response))
+    config = DEFAULT_AGENT_CONFIGS.get("coordinator")
+    llm = get_agent_llm(config)
 
-        tasks = []
-        for i, task_data in enumerate(data.get("tasks", [])):
-            # 生成任务 ID
-            task_id = f"task-{uuid.uuid4().hex[:6]}"
+    prompt = f"""{config.system_prompt}
 
-            # 收集依赖
-            dependencies = task_data.get("dependencies", [])
-            dep_ids = []
-            for dep_name in dependencies:
-                # 通过任务名称匹配依赖
-                for prev_task in tasks:
-                    if prev_task.description.startswith(dep_name):
-                        dep_ids.append(prev_task.id)
-                        break
+用户请求：{request}
 
-            tasks.append(
-                SubTask(
-                    id=task_id,
-                    description=task_data.get("description", ""),
-                    assigned_to=task_data.get("assigned_to", AgentRole.WRITER.value),
-                    status=TaskStatus.PENDING.value,
-                    priority=task_data.get("priority", "medium"),
-                    dependencies=dep_ids,
-                )
+可用角色：researcher（研究员）、writer（撰写者）、editor（编辑）、reviewer（审核员）
+
+请将用户请求分解为 2-4 个逻辑清晰的子任务，并按依赖关系排序。
+返回 JSON 格式：
+{{
+    "tasks": [
+        {{
+            "description": "任务描述",
+            "assigned_to": "角色名",
+            "priority": "high/medium/low",
+            "dependencies": []
+        }}
+    ],
+    "reasoning": "分解理由"
+}}"""
+
+    response = llm.invoke([
+        {"role": "system", "content": config.system_prompt},
+        {"role": "user", "content": prompt},
+    ])
+    result = response.content if hasattr(response, "content") else str(response)
+
+    data = json.loads(_parse_json_response(result))
+
+    tasks = []
+    for task_data in data.get("tasks", []):
+        task_id = f"task-{uuid.uuid4().hex[:6]}"
+
+        dependencies = task_data.get("dependencies", [])
+        dep_ids = []
+        for dep_name in dependencies:
+            for prev_task in tasks:
+                if prev_task.description.startswith(dep_name):
+                    dep_ids.append(prev_task.id)
+                    break
+
+        tasks.append(
+            SubTask(
+                id=task_id,
+                description=task_data.get("description", ""),
+                assigned_to=task_data.get("assigned_to", "writer"),
+                status=TaskStatus.PENDING.value,
+                priority=task_data.get("priority", "medium"),
+                dependencies=dep_ids,
             )
+        )
 
-        # 如果没有分解出任务，使用默认
-        if not tasks:
-            tasks = _decompose_default(request)
-
-        return tasks
-
-    except Exception as e:
-        logger.warning(f"LLM 分解失败，使用默认分解: {e}")
-        return _decompose_default(request)
+    return tasks
 
 
 def _decompose_default(request: str) -> list[SubTask]:
     """
-    默认任务分解（当 LLM 不可用时使用）
+    默认任务分解（LLM 不可用时的备选方案）
 
     Args:
         request: 用户请求
@@ -463,48 +333,44 @@ def _decompose_default(request: str) -> list[SubTask]:
     """
     tasks = []
 
-    # 研究任务
     research_id = f"task-{uuid.uuid4().hex[:6]}"
     tasks.append(
         SubTask(
             id=research_id,
             description=f"研究主题：{request}",
-            assigned_to=AgentRole.RESEARCHER.value,
+            assigned_to="researcher",
             status=TaskStatus.PENDING.value,
         )
     )
 
-    # 撰写任务（依赖研究）
     write_id = f"task-{uuid.uuid4().hex[:6]}"
     tasks.append(
         SubTask(
             id=write_id,
             description="基于研究结果撰写内容",
-            assigned_to=AgentRole.WRITER.value,
+            assigned_to="writer",
             status=TaskStatus.PENDING.value,
             dependencies=[research_id],
         )
     )
 
-    # 编辑任务（依赖撰写）
     edit_id = f"task-{uuid.uuid4().hex[:6]}"
     tasks.append(
         SubTask(
             id=edit_id,
             description="优化和完善内容",
-            assigned_to=AgentRole.EDITOR.value,
+            assigned_to="editor",
             status=TaskStatus.PENDING.value,
             dependencies=[write_id],
         )
     )
 
-    # 审核任务（依赖编辑）
     review_id = f"task-{uuid.uuid4().hex[:6]}"
     tasks.append(
         SubTask(
             id=review_id,
             description="审核内容质量",
-            assigned_to=AgentRole.REVIEWER.value,
+            assigned_to="reviewer",
             status=TaskStatus.PENDING.value,
             dependencies=[edit_id],
         )
@@ -518,28 +384,32 @@ def _decompose_default(request: str) -> list[SubTask]:
 
 def researcher_node(state: MultiAgentState) -> dict:
     """
-    研究员节点
+    研究员节点（独立 LLM + Handoff）
 
     职责：
     1. 收集信息
     2. 分析数据
-    3. 提供研究发现
+    3. 决定下一步（通过 Handoff）
 
     Args:
         state: 当前状态
 
     Returns:
-        状态更新
+        状态更新，包含 Handoff 指令
     """
-    logger.info("Multi-Agent: 研究员收集信息")
+    logger.info("Handoff: Researcher 开始工作")
 
     request = state.get("original_request", "")
+
+    # 获取 Researcher 的独立 LLM
+    config = DEFAULT_AGENT_CONFIGS.get("researcher")
+    llm = get_agent_llm(config)
 
     try:
         start_time = time.time()
 
-        # 使用 LLM 进行研究
-        research_prompt = f"""{RESEARCHER_PROMPT}
+        # 构建 prompt
+        prompt = f"""{config.system_prompt}
 
 主题：{request}
 
@@ -547,37 +417,54 @@ def researcher_node(state: MultiAgentState) -> dict:
 1. 背景信息
 2. 关键发现
 3. 数据支持
-4. 建议和结论"""
+4. 建议和结论
 
-        findings = _invoke_llm(research_prompt, "")
+完成研究后，明确告诉我要交接给哪个 Agent（writer 或 editor）。"""
+
+        # 调用 LLM
+        response = llm.invoke([
+            {"role": "system", "content": config.system_prompt},
+            {"role": "user", "content": prompt},
+        ])
+        findings = response.content if hasattr(response, "content") else str(response)
 
         duration = int((time.time() - start_time) * 1000)
 
         # 更新任务状态
         tasks, completed_tasks = _update_task_status(
-            state, AgentRole.RESEARCHER.value, findings
+            state, "researcher", findings
         )
 
-        logger.info(f"Multi-Agent: 研究完成 - {len(findings)} 字符, 耗时 {duration}ms")
+        # 决定下一步 Handoff
+        next_agent = _get_next_agent(state, "researcher", ["writer", "editor", "reviewer"])
 
-        # 确定下一步路由：下一个未完成的任务
-        next_route = _get_next_route(state, AgentRole.RESEARCHER.value)
+        handoff = AgentHandoff(
+            to_agent=next_agent,
+            reason="研究完成，需要进入下一个阶段",
+            context={"research_findings": findings},
+            from_agent="researcher",
+        )
+
+        logger.info(f"Handoff: Researcher 完成，耗时 {duration}ms，下一步 → {next_agent}")
 
         return {
             "research_findings": findings,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
             "current_stage": "researcher",
-            "current_agent": AgentRole.RESEARCHER.value,
-            "route": next_route,
+            "current_agent": "researcher",
+            "active_handoff": handoff.model_dump(),
+            "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
+            "route": next_agent,
         }
 
     except Exception as e:
-        logger.error(f"Multi-Agent: 研究失败 - {e}")
+        logger.error(f"Handoff: Researcher 失败 - {e}")
         return {
             "research_findings": f"研究失败: {str(e)}",
             "error": f"研究阶段错误: {str(e)}",
-            "route": "complete",
+            "active_handoff": None,
+            "route": "END",
         }
 
 
@@ -586,66 +473,85 @@ def researcher_node(state: MultiAgentState) -> dict:
 
 def writer_node(state: MultiAgentState) -> dict:
     """
-    撰写者节点
+    撰写者节点（独立 LLM + Handoff）
 
     职责：
     1. 基于研究结果撰写内容
     2. 组织结构
-    3. 生成初稿
+    3. 决定下一步（通过 Handoff）
 
     Args:
         state: 当前状态
 
     Returns:
-        状态更新
+        状态更新，包含 Handoff 指令
     """
-    logger.info("Multi-Agent: 撰写者生成内容")
+    logger.info("Handoff: Writer 开始工作")
 
     request = state.get("original_request", "")
     research = state.get("research_findings", "")
 
+    # 获取 Writer 的独立 LLM
+    config = DEFAULT_AGENT_CONFIGS.get("writer")
+    llm = get_agent_llm(config)
+
     try:
         start_time = time.time()
 
-        # 使用 LLM 生成内容
-        write_prompt = f"""{WRITER_PROMPT}
-
-主题：{request}
+        # 构建 prompt
+        prompt = f"""主题：{request}
 
 研究发现：
 {research}
 
-请撰写一篇结构完整、内容充实的文章。"""
+请撰写一篇结构完整、内容充实的文章。
 
-        draft = _invoke_llm(write_prompt, "")
+完成后，明确告诉我要交接给哪个 Agent（editor 或 reviewer）。"""
+
+        # 调用 LLM
+        response = llm.invoke([
+            {"role": "system", "content": config.system_prompt},
+            {"role": "user", "content": prompt},
+        ])
+        draft = response.content if hasattr(response, "content") else str(response)
 
         duration = int((time.time() - start_time) * 1000)
 
         # 更新任务状态
         tasks, completed_tasks = _update_task_status(
-            state, AgentRole.WRITER.value, draft
+            state, "writer", draft
         )
 
-        logger.info(f"Multi-Agent: 撰写完成 - {len(draft)} 字符, 耗时 {duration}ms")
+        # 决定下一步 Handoff
+        next_agent = _get_next_agent(state, "writer", ["editor", "reviewer"])
 
-        # 确定下一步路由
-        next_route = _get_next_route(state, AgentRole.WRITER.value)
+        handoff = AgentHandoff(
+            to_agent=next_agent,
+            reason="撰写完成，需要进入编辑阶段",
+            context={"draft_content": draft},
+            from_agent="writer",
+        )
+
+        logger.info(f"Handoff: Writer 完成，耗时 {duration}ms，下一步 → {next_agent}")
 
         return {
             "draft_content": draft,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
             "current_stage": "writer",
-            "current_agent": AgentRole.WRITER.value,
-            "route": next_route,
+            "current_agent": "writer",
+            "active_handoff": handoff.model_dump(),
+            "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
+            "route": next_agent,
         }
 
     except Exception as e:
-        logger.error(f"Multi-Agent: 撰写失败 - {e}")
+        logger.error(f"Handoff: Writer 失败 - {e}")
         return {
             "draft_content": f"撰写失败: {str(e)}",
             "error": f"撰写阶段错误: {str(e)}",
-            "route": "complete",
+            "active_handoff": None,
+            "route": "END",
         }
 
 
@@ -654,23 +560,27 @@ def writer_node(state: MultiAgentState) -> dict:
 
 def editor_node(state: MultiAgentState) -> dict:
     """
-    编辑节点
+    编辑节点（独立 LLM + Handoff）
 
     职责：
     1. 优化内容结构
     2. 改进语言表达
-    3. 确保逻辑连贯
+    3. 决定下一步（通过 Handoff）
 
     Args:
         state: 当前状态
 
     Returns:
-        状态更新
+        状态更新，包含 Handoff 指令
     """
-    logger.info("Multi-Agent: 编辑优化内容")
+    logger.info("Handoff: Editor 开始工作")
 
     draft = state.get("draft_content", "")
     revision_requests = state.get("revision_requests", [])
+
+    # 获取 Editor 的独立 LLM
+    config = DEFAULT_AGENT_CONFIGS.get("editor")
+    llm = get_agent_llm(config)
 
     try:
         start_time = time.time()
@@ -680,42 +590,60 @@ def editor_node(state: MultiAgentState) -> dict:
         if revision_requests:
             revision_note = "\n\n修订要求：\n" + "\n".join(f"- {req}" for req in revision_requests)
 
-        edit_prompt = f"""{EDITOR_PROMPT}
-
-原始内容：
+        prompt = f"""原始内容：
 {draft}
 
 {revision_note}
 
-请优化内容，提升质量和可读性。"""
+请优化内容，提升质量和可读性。
 
-        edited = _invoke_llm(edit_prompt, "")
+完成后，明确告诉我要交接给哪个 Agent（reviewer 或继续给自己进行更多修改）。"""
+
+        # 调用 LLM
+        response = llm.invoke([
+            {"role": "system", "content": config.system_prompt},
+            {"role": "user", "content": prompt},
+        ])
+        edited = response.content if hasattr(response, "content") else str(response)
 
         duration = int((time.time() - start_time) * 1000)
 
         # 更新任务状态
         tasks, completed_tasks = _update_task_status(
-            state, AgentRole.EDITOR.value, edited
+            state, "editor", edited
         )
 
-        logger.info(f"Multi-Agent: 编辑完成 - {len(edited)} 字符, 耗时 {duration}ms")
+        # 编辑完成后总是进入审核
+        next_agent = "reviewer"
+
+        handoff = AgentHandoff(
+            to_agent=next_agent,
+            reason="编辑优化完成，进入审核阶段",
+            context={"edited_content": edited},
+            from_agent="editor",
+        )
+
+        logger.info(f"Handoff: Editor 完成，耗时 {duration}ms，下一步 → {next_agent}")
 
         return {
             "edited_content": edited,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
             "current_stage": "editor",
-            "current_agent": AgentRole.EDITOR.value,
+            "current_agent": "editor",
             "revision_requests": [],
-            "route": "reviewer",  # 编辑完成后总是进入审核
+            "active_handoff": handoff.model_dump(),
+            "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
+            "route": next_agent,
         }
 
     except Exception as e:
-        logger.error(f"Multi-Agent: 编辑失败 - {e}")
+        logger.error(f"Handoff: Editor 失败 - {e}")
         return {
             "edited_content": draft,
             "error": f"编辑阶段错误: {str(e)}",
-            "route": "complete",
+            "active_handoff": None,
+            "route": "END",
         }
 
 
@@ -724,46 +652,56 @@ def editor_node(state: MultiAgentState) -> dict:
 
 def reviewer_node(state: MultiAgentState) -> dict:
     """
-    审核员节点
+    审核员节点（独立 LLM + Handoff）
 
     职责：
     1. 质量检查
     2. 提供反馈
-    3. 决定是否需要修订
+    3. 决定是否需要修订（通过 Handoff）
 
     Args:
         state: 当前状态
 
     Returns:
-        状态更新
+        状态更新，包含 Handoff 指令
     """
-    logger.info("Multi-Agent: 审核员检查质量")
+    logger.info("Handoff: Reviewer 开始工作")
 
     edited_content = state.get("edited_content", "")
     iteration_count = state.get("iteration_count", 0)
     max_iterations = state.get("max_iterations", 3)
 
+    # 获取 Reviewer 的独立 LLM
+    config = DEFAULT_AGENT_CONFIGS.get("reviewer")
+    llm = get_agent_llm(config)
+
     try:
         start_time = time.time()
 
-        # 使用 LLM 进行审核
-        review_prompt = f"""{REVIEWER_PROMPT}
-
-待审核内容：
+        # 构建审核提示
+        prompt = f"""待审核内容：
 {edited_content}
 
-请仔细审核内容，如果需要修订请明确列出问题。"""
+请仔细审核内容，如果需要修订请明确列出问题。
 
-        review_result = _invoke_llm(review_prompt, "")
+如果内容质量达标，明确告诉我要交接给 'END' 结束流程。
+如果需要修订，告诉我要交接给 'editor' 进行修订。"""
+
+        # 调用 LLM
+        response = llm.invoke([
+            {"role": "system", "content": config.system_prompt},
+            {"role": "user", "content": prompt},
+        ])
+        review_result = response.content if hasattr(response, "content") else str(response)
 
         duration = int((time.time() - start_time) * 1000)
 
         # 更新任务状态
         tasks, completed_tasks = _update_task_status(
-            state, AgentRole.REVIEWER.value, review_result
+            state, "reviewer", review_result
         )
 
-        # 判断是否需要修订（检查审核结果中是否包含修订要求）
+        # 判断是否需要修订
         needs_revision = _check_needs_revision(review_result) and iteration_count < max_iterations
 
         # 提取修订请求
@@ -771,28 +709,42 @@ def reviewer_node(state: MultiAgentState) -> dict:
         if needs_revision:
             revision_requests = _extract_revision_requests(review_result)
 
-        logger.info(f"Multi-Agent: 审核完成 - {'需要修订' if needs_revision else '通过'}, 耗时 {duration}ms")
+        # 决定下一步 Handoff
+        next_agent = "editor" if needs_revision else "END"
+        handoff_reason = "内容需要修订" if needs_revision else "内容审核通过，流程结束"
+
+        handoff = AgentHandoff(
+            to_agent=next_agent,
+            reason=handoff_reason,
+            context={"review_feedback": review_result, "needs_revision": needs_revision},
+            from_agent="reviewer",
+        )
+
+        logger.info(f"Handoff: Reviewer 完成，{'需要修订' if needs_revision else '通过'}，下一步 → {next_agent}")
 
         return {
             "review_feedback": review_result,
             "tasks": tasks,
             "completed_tasks": completed_tasks,
             "current_stage": "reviewer",
-            "current_agent": AgentRole.REVIEWER.value,
+            "current_agent": "reviewer",
             "needs_revision": needs_revision,
             "revision_requests": revision_requests,
             "iteration_count": iteration_count + 1,
             "final_output": edited_content if not needs_revision else "",
-            "route": "editor" if needs_revision else "complete",
+            "active_handoff": handoff.model_dump(),
+            "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
+            "route": next_agent,
         }
 
     except Exception as e:
-        logger.error(f"Multi-Agent: 审核失败 - {e}")
+        logger.error(f"Handoff: Reviewer 失败 - {e}")
         return {
             "review_feedback": f"审核失败: {str(e)}",
             "error": f"审核阶段错误: {str(e)}",
             "final_output": edited_content,
-            "route": "complete",
+            "active_handoff": None,
+            "route": "END",
         }
 
 
@@ -869,9 +821,36 @@ def _update_task_status(
     return tasks, completed_tasks
 
 
+def _get_next_agent(state: MultiAgentState, completed_agent: str, candidates: list[str]) -> str:
+    """
+    根据已完成的任务确定下一个 Handoff 目标
+
+    Args:
+        state: 当前状态
+        completed_agent: 已完成的 Agent
+        candidates: 候选的下一个 Agent 列表
+
+    Returns:
+        下一个 Agent 名称或 "END"
+    """
+    tasks = state.get("tasks", [])
+    completed_tasks = set(state.get("completed_tasks", []))
+    completed_tasks.add(completed_agent)
+
+    # 按顺序查找下一个未完成的任务
+    for agent in candidates:
+        if agent == completed_agent:
+            continue
+        for task in tasks:
+            if task.get("assigned_to") == agent and task.get("id") not in completed_tasks:
+                return agent
+
+    return "END"
+
+
 def _get_next_route(state: MultiAgentState, completed_role: str) -> str:
     """
-    根据已完成的任务确定下一个路由目标
+    根据已完成的任务确定下一个路由目标（兼容旧代码）
 
     Args:
         state: 当前状态
@@ -880,28 +859,53 @@ def _get_next_route(state: MultiAgentState, completed_role: str) -> str:
     Returns:
         下一个路由目标（agent 名称或 "complete"）
     """
-    tasks = state.get("tasks", [])
-    completed_tasks = set(state.get("completed_tasks", []))
-    completed_tasks.add(completed_role)  # 假设当前角色会立即标记为完成
-
-    # 按顺序查找下一个未完成的任务
-    agent_order = ["researcher", "writer", "editor", "reviewer"]
-    for agent in agent_order:
-        if agent == completed_role:
-            continue
-        for task in tasks:
-            if task.get("assigned_to") == agent and task.get("id") not in completed_tasks:
-                return agent
-
-    return "complete"
+    return _get_next_agent(state, completed_role, ["researcher", "writer", "editor", "reviewer"])
 
 
 # ===== 条件路由函数 =====
 
 
+def handoff_router(state: MultiAgentState) -> str:
+    """
+    Handoff 路由节点：基于 Agent 的 Handoff 决定下一个节点
+
+    这是 Handoff 模式的核心：
+    - 每个 Agent 执行完后会设置 active_handoff
+    - 这个路由函数读取 active_handoff 并决定下一步
+
+    Args:
+        state: 当前状态
+
+    Returns:
+        下一个节点名称（agent 名称或 END）
+    """
+    handoff = state.get("active_handoff")
+
+    if handoff:
+        next_agent = handoff.get("to_agent", "END")
+        logger.info(f"Handoff Router: {handoff.get('from_agent', 'unknown')} → {next_agent} ({handoff.get('reason', '')})")
+        return next_agent
+
+    # 如果没有 Handoff，检查是否有待处理的任务
+    tasks = state.get("tasks", [])
+    completed_tasks = set(state.get("completed_tasks", []))
+
+    for task_dict in tasks:
+        task_id = task_dict.get("id")
+        if task_id in completed_tasks:
+            continue
+
+        dependencies = task_dict.get("dependencies", [])
+        if all(dep in completed_tasks for dep in dependencies):
+            agent = task_dict.get("assigned_to")
+            return agent
+
+    return "END"
+
+
 def route_to_agent_node(state: MultiAgentState) -> str:
     """
-    条件路由节点：决定下一个执行的智能体
+    条件路由节点：决定下一个执行的智能体（兼容旧代码）
 
     基于任务依赖关系和完成状态进行路由。
 
@@ -911,6 +915,10 @@ def route_to_agent_node(state: MultiAgentState) -> str:
     Returns:
         下一个节点名称
     """
+    # 优先使用 Handoff 协议
+    if state.get("active_handoff"):
+        return handoff_router(state)
+
     tasks = state.get("tasks", [])
     completed_tasks = set(state.get("completed_tasks", []))
 
@@ -924,75 +932,91 @@ def route_to_agent_node(state: MultiAgentState) -> str:
         if task_id in completed_tasks:
             continue
 
-        # 检查依赖是否满足
         dependencies = task_dict.get("dependencies", [])
         if all(dep in completed_tasks for dep in dependencies):
             agent = task_dict.get("assigned_to")
             return agent
 
-    # 所有任务完成
-    return "complete"
+    return "END"
 
 
-def should_continue_node(state: MultiAgentState) -> str:
+# ===== 已实现：并行执行路由 =====
+
+def route_for_parallel_node(state: MultiAgentState) -> list[str]:
     """
-    条件路由节点：判断是否继续迭代
+    条件路由节点：返回可并行执行的任务列表
+
+    查找所有依赖已满足且相互之间无依赖的任务。
+    这些任务可以被并行执行。
 
     Args:
         state: 当前状态
 
     Returns:
-        'continue' 或 'complete'
-    """
-    iteration_count = state.get("iteration_count", 0)
-    max_iterations = state.get("max_iterations", 3)
-    needs_revision = state.get("needs_revision", False)
-
-    if needs_revision and iteration_count < max_iterations:
-        return "continue"
-    else:
-        return "complete"
-
-
-# ===== 预留：并行执行路由 =====
-
-def route_for_parallel_node(state: MultiAgentState) -> list[dict]:
-    """
-    条件路由节点：返回可并行执行的任务列表（预留）
-
-    用于 Team 模式下的并行任务分配。
-
-    Returns:
-        可并行执行的任务列表
+        可并行执行的任务 ID 列表
     """
     tasks = state.get("tasks", [])
     completed_tasks = set(state.get("completed_tasks", []))
 
-    parallel_tasks = []
+    ready_tasks = []
 
     for task_dict in tasks:
         task_id = task_dict.get("id")
         if task_id in completed_tasks:
             continue
 
-        # 检查依赖是否满足
         dependencies = task_dict.get("dependencies", [])
         if all(dep in completed_tasks for dep in dependencies):
-            # 收集无依赖的任务
-            if not dependencies:
-                parallel_tasks.append(task_dict)
+            ready_tasks.append(task_id)
 
-    return parallel_tasks
+    logger.info(f"并行执行路由：{len(ready_tasks)} 个任务就绪")
+    return ready_tasks
 
 
-# ===== 预留：Handoff 路由 =====
+def get_parallel_tasks(state: MultiAgentState) -> list[dict]:
+    """
+    获取可并行执行的任务详情列表
+
+    与 route_for_parallel_node 不同，此函数返回完整任务信息，
+    用于并行节点执行。
+
+    Args:
+        state: 当前状态
+
+    Returns:
+        可并行执行的任务详情列表
+    """
+    tasks = state.get("tasks", [])
+    completed_tasks = set(state.get("completed_tasks", []))
+    parallel_task_ids = set()
+
+    for task_dict in tasks:
+        task_id = task_dict.get("id")
+        if task_id in completed_tasks:
+            continue
+
+        dependencies = task_dict.get("dependencies", [])
+        if all(dep in completed_tasks for dep in dependencies):
+            parallel_task_ids.add(task_id)
+
+    parallel_task_list = []
+    for task_id in parallel_task_ids:
+        for task_dict in tasks:
+            if task_dict.get("id") == task_id:
+                parallel_task_list.append(task_dict)
+                break
+
+    return parallel_task_list
+
+
+# ===== 已实现：Handoff 路由 =====
 
 def route_with_handoff(state: MultiAgentState) -> str:
     """
-    Handoff 路由函数（预留）
+    Handoff 路由函数
 
-    当实现 Handoff 模式时，使用此函数进行路由。
-    允许 Agent 主动交接控制权。
+    优先使用 active_handoff（Agent 主动发起的 Handoff），
+    其次检查 pending_handoff，最后降级到基于任务依赖的路由。
 
     Args:
         state: 当前状态
@@ -1000,44 +1024,71 @@ def route_with_handoff(state: MultiAgentState) -> str:
     Returns:
         下一个 Agent 或 'END'
     """
-    # 检查是否有待处理的 Handoff
+    # 1. 优先使用 active_handoff（每个 Agent 执行后设置的）
+    active_handoff = state.get("active_handoff")
+    if active_handoff:
+        to_agent = active_handoff.get("to_agent", "END")
+        logger.info(f"Handoff: {active_handoff.get('from_agent', 'unknown')} → {to_agent} ({active_handoff.get('reason', '')})")
+        return to_agent
+
+    # 2. 检查 pending_handoff
     pending_handoff = state.get("pending_handoff")
     if pending_handoff:
-        return pending_handoff.get("to_agent", "complete")
+        return pending_handoff.get("to_agent", "END")
 
-    # 否则使用默认路由
+    # 3. 降级到基于任务依赖的路由
     return route_to_agent_node(state)
 
 
 def initiate_handoff(
-    state: MultiAgentState,
-    from_agent: str,
     to_agent: str,
+    from_agent: str,
     context: dict,
     reason: str = "",
-) -> dict:
+) -> AgentHandoff:
     """
-    发起 Handoff（预留实现）
+    发起 Handoff
 
-    用于 Agent 之间主动交接控制权。
+    创建一个 Handoff 对象，由调用方设置到 state 中。
 
     Args:
-        state: 当前状态
-        from_agent: 来源 Agent
         to_agent: 目标 Agent
+        from_agent: 来源 Agent
         context: 传递的上下文
         reason: 交接原因
 
     Returns:
-        状态更新
+        AgentHandoff 对象
     """
-    handoff = create_handoff(to_agent, from_agent, context, reason)
-    return execute_handoff(state, handoff)
+    handoff = AgentHandoff(
+        to_agent=to_agent,
+        from_agent=from_agent,
+        reason=reason,
+        context=context,
+    )
+    logger.info(f"Handoff 创建: {from_agent} → {to_agent} ({reason})")
+    return handoff
+
+
+def should_parallel_execute(state: MultiAgentState) -> bool:
+    """
+    判断是否应该并行执行
+
+    当存在多个就绪且无相互依赖的任务时，返回 True。
+
+    Args:
+        state: 当前状态
+
+    Returns:
+        是否应该并行执行
+    """
+    parallel_ids = route_for_parallel_node(state)
+    return len(parallel_ids) >= 2
 
 
 # ===== 预留：Tool Calling 绑定 =====
 
-def bind_tools_to_agent(tools: list) -> Callable:
+def bind_tools_to_agent(tools: list):
     """
     为 Agent 绑定工具（预留实现）
 
@@ -1049,8 +1100,9 @@ def bind_tools_to_agent(tools: list) -> Callable:
     Returns:
         绑定工具后的 LLM
     """
-    provider = _get_llm_provider()
-    return provider.bind_tools(tools)
+    config = DEFAULT_AGENT_CONFIGS.get("coordinator")
+    llm = get_agent_llm(config)
+    return llm.bind_tools(tools)
 
 
 def create_researcher_with_tools(tools: list):
@@ -1065,26 +1117,31 @@ def create_researcher_with_tools(tools: list):
     """
     def researcher_with_tools(state: MultiAgentState) -> dict:
         """带工具的研究员节点"""
-        logger.info("Multi-Agent: 研究员（带工具）收集信息")
+        logger.info("Handoff: Researcher（带工具）开始工作")
 
         request = state.get("original_request", "")
-        provider = _get_llm_provider()
-        model = provider.bind_tools(tools)
+        config = DEFAULT_AGENT_CONFIGS.get("researcher")
+        llm = get_agent_llm(config)
+        model = llm.bind_tools(tools)
 
         try:
-            # 使用工具进行研究
-            system_prompt = f"{RESEARCHER_PROMPT}\n\n你可以使用搜索工具获取最新信息。"
+            system_prompt = f"{config.system_prompt}\n\n你可以使用搜索工具获取最新信息。"
 
             response = model.invoke([
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"研究主题：{request}"},
             ])
 
-            findings = response.content
+            findings = response.content if hasattr(response, "content") else str(response)
 
-            # 更新任务状态
-            tasks, completed_tasks = _update_task_status(
-                state, AgentRole.RESEARCHER.value, findings
+            tasks, completed_tasks = _update_task_status(state, "researcher", findings)
+            next_agent = _get_next_agent(state, "researcher", ["writer", "editor", "reviewer"])
+
+            handoff = AgentHandoff(
+                to_agent=next_agent,
+                reason="研究完成，需要进入下一个阶段",
+                context={"research_findings": findings},
+                from_agent="researcher",
             )
 
             return {
@@ -1092,14 +1149,19 @@ def create_researcher_with_tools(tools: list):
                 "tasks": tasks,
                 "completed_tasks": completed_tasks,
                 "current_stage": "researcher",
-                "current_agent": AgentRole.RESEARCHER.value,
+                "current_agent": "researcher",
+                "active_handoff": handoff.model_dump(),
+                "handoff_history": state.get("handoff_history", []) + [handoff.model_dump()],
+                "route": next_agent,
             }
 
         except Exception as e:
-            logger.error(f"Multi-Agent: 研究失败 - {e}")
+            logger.error(f"Handoff: Researcher（带工具）失败 - {e}")
             return {
                 "research_findings": f"研究失败: {str(e)}",
                 "error": str(e),
+                "active_handoff": None,
+                "route": "END",
             }
 
     return researcher_with_tools

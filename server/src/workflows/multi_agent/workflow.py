@@ -4,19 +4,13 @@
 
 展示 LangGraph 的多智能体协作能力：
 - LLM 动态任务分解
-- 顺序执行与依赖管理
-- 结果合并与迭代优化
-- 流式输出
-- Checkpointer 状态持久化
-- 继承 BaseWorkflow 基类
-
-预留接口：
-- Handoff 模式（handoff_to_agent）
-- Team 模式（parallel_execute）
-- Tool Calling（bind_tools）
+- Handoff 模式（Agent 间控制权传递）
+- 并行执行（多任务并行处理）
+- Tool Calling（工具调用能力）
+- 流式输出与 Checkpointer 状态持久化
 
 工作流结构:
-    START → coordinator → [条件路由]
+    START → coordinator → [handoff_router]
                              ├→ researcher
                              ├→ writer
                              ├→ editor → reviewer → [判断]
@@ -46,7 +40,7 @@ from workflows.multi_agent.nodes import (
     editor_node,
     reviewer_node,
     route_to_agent_node,
-    should_continue_node,
+    handoff_router,
 )
 
 from core.logger import logger
@@ -63,16 +57,7 @@ class MultiAgentWorkflow(BaseWorkflow):
     - 编辑（Editor）：内容优化
     - 审核员（Reviewer）：质量控制
 
-    Features:
-    - LLM 驱动的动态任务分解
-    - 迭代优化（最多 3 轮）
-    - 流式执行支持
-    - 状态持久化
-
-    预留扩展点：
-    - Handoff 模式：Agent 间控制权传递
-    - Team 模式：并行任务执行
-    - Tool Calling：工具调用能力
+    支持 Handoff 模式（Agent 间控制权传递）、并行执行（多任务并行处理）、Tool Calling（工具调用能力）。
     """
 
     name = "multi_agent"
@@ -91,10 +76,14 @@ class MultiAgentWorkflow(BaseWorkflow):
         """
         构建工作流图
 
+        使用 Handoff 模式：
+        - 每个 Agent 完成后返回 active_handoff 决定下一步
+        - handoff_router 读取 active_handoff 进行路由
+
         Returns:
             编译后的 StateGraph
         """
-        logger.info(f"构建工作流: {self.name}")
+        logger.info(f"构建工作流: {self.name} (Handoff 模式)")
 
         # 创建状态图
         workflow = StateGraph(MultiAgentState)
@@ -106,62 +95,74 @@ class MultiAgentWorkflow(BaseWorkflow):
         workflow.add_node("editor", editor_node)
         workflow.add_node("reviewer", reviewer_node)
 
-        # ===== 设置入口点 =====
+        # 设置入口点
         workflow.set_entry_point("coordinator")
 
-        # ===== 条件路由：协调者分配任务后路由到对应智能体 =====
+        # ===== Handoff 条件路由 =====
+        # 每个 Agent 节点都通过 handoff_router 决定下一步
+        # 这样每个 Agent 都可以自己决定下一步（真正的 Handoff）
+
         workflow.add_conditional_edges(
             "coordinator",
-            route_to_agent_node,
+            handoff_router,
             {
                 "researcher": "researcher",
                 "writer": "writer",
                 "editor": "editor",
                 "reviewer": "reviewer",
-                "complete": END,
+                "END": END,
             },
         )
 
-        # ===== 研究员完成后路由 =====
         workflow.add_conditional_edges(
             "researcher",
-            route_to_agent_node,
+            handoff_router,
             {
                 "researcher": "researcher",
                 "writer": "writer",
                 "editor": "editor",
                 "reviewer": "reviewer",
-                "complete": END,
+                "END": END,
             },
         )
 
-        # ===== 撰写者完成后路由 =====
         workflow.add_conditional_edges(
             "writer",
-            route_to_agent_node,
+            handoff_router,
             {
                 "researcher": "researcher",
                 "writer": "writer",
                 "editor": "editor",
                 "reviewer": "reviewer",
-                "complete": END,
+                "END": END,
             },
         )
 
-        # ===== 编辑完成后路由到审核员 =====
-        workflow.add_edge("editor", "reviewer")
+        workflow.add_conditional_edges(
+            "editor",
+            handoff_router,
+            {
+                "researcher": "researcher",
+                "writer": "writer",
+                "editor": "editor",
+                "reviewer": "reviewer",
+                "END": END,
+            },
+        )
 
-        # ===== 审核员完成后判断是否继续迭代 =====
         workflow.add_conditional_edges(
             "reviewer",
-            should_continue_node,
+            handoff_router,
             {
-                "continue": "editor",  # 需要修订，回到编辑
-                "complete": END,  # 完成
+                "researcher": "researcher",
+                "writer": "writer",
+                "editor": "editor",
+                "reviewer": "reviewer",
+                "END": END,
             },
         )
 
-        # ===== 编译工作流 =====
+        # 编译工作流
         checkpointer = self.checkpointer or MemorySaver()
         return workflow.compile(checkpointer=checkpointer)
 
@@ -202,6 +203,14 @@ class MultiAgentWorkflow(BaseWorkflow):
             "revision_requests": [],
             "handoffs": [],
             "pending_handoff": None,
+            # Handoff 协议字段
+            "active_handoff": None,
+            "handoff_history": [],
+            "agent_configs": {},
+            # 并行执行字段
+            "parallel_tasks": [],
+            "parallel_execution": False,
+            "parallel_results": {},
             "error": None,
             "failed_agents": [],
         }
@@ -368,7 +377,7 @@ class MultiAgentWorkflow(BaseWorkflow):
         )
 
 
-# ========== 工厂函数（保持向后兼容）==========
+# ========== 工厂函数 ==========
 
 def create_multi_agent_workflow(
     checkpointer: BaseCheckpointSaver | None = None,

@@ -45,14 +45,15 @@ from workflows.multi_agent.nodes import (
     reviewer_node,
     # 路由函数
     route_to_agent_node,
-    should_continue_node,
-    # Handoff 预留函数
+    # Handoff 函数
     create_handoff,
     execute_handoff,
     initiate_handoff,
     route_with_handoff,
-    # 并行执行预留函数
+    # 并行执行函数
     route_for_parallel_node,
+    get_parallel_tasks,
+    should_parallel_execute,
     # Tool Calling 预留函数
     bind_tools_to_agent,
     create_researcher_with_tools,
@@ -84,14 +85,15 @@ __all__ = [
     "reviewer_node",
     # 路由函数
     "route_to_agent_node",
-    "should_continue_node",
-    # Handoff 预留
+    # Handoff
     "create_handoff",
     "execute_handoff",
     "initiate_handoff",
     "route_with_handoff",
-    # 并行执行预留
+    # 并行执行
     "route_for_parallel_node",
+    "get_parallel_tasks",
+    "should_parallel_execute",
     # Tool Calling 预留
     "bind_tools_to_agent",
     "create_researcher_with_tools",

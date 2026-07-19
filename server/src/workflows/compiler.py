@@ -59,7 +59,6 @@ def _register_handlers():
         editor_node,
         reviewer_node,
         route_to_agent_node,
-        should_continue_node,
         route_for_parallel_node,
     )
 
@@ -105,7 +104,6 @@ def _register_handlers():
         "editor_node": editor_node,
         "reviewer_node": reviewer_node,
         "route_to_agent_node": route_to_agent_node,
-        "should_continue_node": should_continue_node,
         "route_for_parallel_node": route_for_parallel_node,
     })
 

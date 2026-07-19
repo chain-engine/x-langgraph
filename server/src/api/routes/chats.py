@@ -23,7 +23,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("/execute", response_model=ChatResponse)
 async def chat_execute(request: ChatRequest) -> ChatResponse:
     """
-    同步聊天接口
+    同步聊天
 
     Args:
         request: 聊天请求
@@ -51,7 +51,7 @@ async def chat_execute(request: ChatRequest) -> ChatResponse:
 @router.post("/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     """
-    流式聊天接口（SSE）
+    流式聊天（SSE）
 
     Args:
         request: 聊天请求
