@@ -83,13 +83,32 @@ coordinator → researcher → writer → editor → reviewer
 
 ## 工作流示例
 
-### 意图分类路由
+本框架内置 **7 种典型工作流**，覆盖智能客服、RAG 问答、多智能体协作等核心场景：
+
+### 1. 意图分类路由
 
 ```
-START → classify → [条件路由] → product_inquiry | order_status | technical_support | complaint | billing
+START → classify → [条件路由]
+                   ├→ product_inquiry → END
+                   ├→ order_status → END
+                   ├→ technical_support → END
+                   ├→ complaint → END
+                   └→ billing → END
 ```
+**特点**：LLM 意图分类 + 规则降级 + 6 类业务分发
 
-### RAG 文档问答
+### 2. 智能客服
+
+```
+START → intake → classify → [条件路由]
+                   ├→ handle_inquiry → review → END
+                   ├→ handle_complaint → review → END
+                   ├→ handle_technical → review → END
+                   └→ handle_billing → review → END
+```
+**特点**：多级条件路由 + Checkpointer 状态持久化 + 4 类工单处理
+
+### 3. RAG 文档问答
 
 ```
 START → init → [需要澄清?] → clarify → END
@@ -98,14 +117,49 @@ START → init → [需要澄清?] → clarify → END
                                      ↓
                                generate → END
 ```
+**特点**：向量检索 + 上下文构建 + LLM 生成 + 降级处理
 
-### 自动化审批
+### 4. 多智能体协作
+
+```
+START → coordinator → [handoff_router]
+                      ├→ researcher → [handoff_router]
+                      │                ├→ writer
+                      │                └→ ...
+                      ├→ writer → [handoff_router]
+                      ├→ editor → [handoff_router]
+                      └→ reviewer → [needs_revision?] → writer
+                                     ↓
+                               [通过] → END
+```
+**特点**：Handoff 模式（Agent 间控制权传递）+ 5 种角色协作 + 迭代修订
+
+### 5. 自动化审批
 
 ```
 START → submit → evaluate → [风险评估路由]
                           ├→ auto_approve → notify → END
                           └→ human_approval → [interrupt] → notify → END
 ```
+**特点**：自动评估 + 风险评估 + Human-in-the-Loop + 通知发送
+
+### 6. ReAct 推理模式
+
+```
+START → reasoning → [FINISH?] → acting → observation → reflection
+         ↑                                                 ↓
+         └────────────── (should_continue) ←───────────────┘
+```
+**特点**：推理 → 行动 → 观察 → 反思循环，支持工具调用
+
+### 7. Plan-and-Execute 规划执行
+
+```
+START → planner → executor → reflector → [needs_replan?] → replan → planner
+                                          ↓
+                                    [完成] → finish → END
+```
+**特点**：任务分解 + 执行追踪 + 反思评估 + 动态重规划
 
 ---
 

@@ -83,13 +83,32 @@ Supports Handoff mode, parallel tasks, and tool calling.
 
 ## Workflow Examples
 
-### Intent Classification Router
+This framework includes **7 built-in workflows** covering customer service, RAG Q&A, multi-agent collaboration and more:
+
+### 1. Intent Classification Router
 
 ```
-START → classify → [Conditional Route] → product_inquiry | order_status | technical_support | complaint | billing
+START → classify → [Conditional Route]
+                   ├→ product_inquiry → END
+                   ├→ order_status → END
+                   ├→ technical_support → END
+                   ├→ complaint → END
+                   └→ billing → END
 ```
+**Features**: LLM intent classification + rule fallback + 6 business categories
 
-### RAG Document Q&A
+### 2. Customer Service
+
+```
+START → intake → classify → [Conditional Route]
+                   ├→ handle_inquiry → review → END
+                   ├→ handle_complaint → review → END
+                   ├→ handle_technical → review → END
+                   └→ handle_billing → review → END
+```
+**Features**: Multi-level conditional routing + Checkpointer state persistence + 4 ticket types
+
+### 3. RAG Document Q&A
 
 ```
 START → init → [Needs Clarification?] → clarify → END
@@ -98,14 +117,49 @@ START → init → [Needs Clarification?] → clarify → END
                                      ↓
                                generate → END
 ```
+**Features**: Vector retrieval + context building + LLM generation + fallback handling
 
-### Automated Approval
+### 4. Multi-Agent Collaboration
+
+```
+START → coordinator → [handoff_router]
+                      ├→ researcher → [handoff_router]
+                      │                ├→ writer
+                      │                └→ ...
+                      ├→ writer → [handoff_router]
+                      ├→ editor → [handoff_router]
+                      └→ reviewer → [needs_revision?] → writer
+                                     ↓
+                               [approved] → END
+```
+**Features**: Handoff mode (control transfer between agents) + 5 roles collaboration + iterative revision
+
+### 5. Automated Approval
 
 ```
 START → submit → evaluate → [Risk Assessment Route]
                           ├→ auto_approve → notify → END
                           └→ human_approval → [interrupt] → notify → END
 ```
+**Features**: Auto evaluation + risk assessment + Human-in-the-Loop + notification
+
+### 6. ReAct Reasoning Mode
+
+```
+START → reasoning → [FINISH?] → acting → observation → reflection
+         ↑                                                 ↓
+         └────────────── (should_continue) ←───────────────┘
+```
+**Features**: Reason → Act → Observe → Reflect loop with tool calling support
+
+### 7. Plan-and-Execute
+
+```
+START → planner → executor → reflector → [needs_replan?] → replan → planner
+                                          ↓
+                                    [done] → finish → END
+```
+**Features**: Task decomposition + execution tracking + reflection + dynamic replanning
 
 ---
 
