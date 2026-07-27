@@ -143,12 +143,6 @@ flowchart TB
 | 多智能体协作 | `multi_agent.py` | Handoff 模式 + 5 种角色协作 |
 | 自动化审批 | `approval.py` | 风险评估 + Human-in-the-Loop |
 
-- **API 层**：参数接收、鉴权、转发调用
-- **Service 层**：业务规则、事务编排、多仓储联动
-- **Repository 层**：CRUD、多表查询，依赖 infras 获取会话
-- **Models 层**：纯数据表映射
-- **Infra 层**：封装第三方客户端，**永不反向依赖上层**
-
 ### 2. 核心业务流程
 
 #### 工作流执行流程
