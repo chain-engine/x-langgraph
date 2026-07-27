@@ -12,7 +12,7 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from schemas.chat import ChatRequest, ChatResponse, StreamEvent
+from schemas.chat import ChatRequest, ChatResponse, StreamEvent, ReasoningConfigRequest
 from core.logger import logger
 from core.container import container
 from services.chat_service import ChatService
@@ -41,6 +41,7 @@ async def chat_execute(request: ChatRequest) -> ChatResponse:
             response=result.get("response", ""),
             session_id=result.get("session_id", request.session_id),
             node=result.get("node"),
+            intermediate_steps=result.get("intermediate_steps"),
         )
 
     except Exception as e:
@@ -67,11 +68,15 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             async for event in chat_service.stream(
                 request.workflow,
                 request.message,
-                request.session_id
+                request.session_id,
+                reasoning_config=request.reasoning,
             ):
                 stream_event = StreamEvent(
                     event=event.get("event", "node_update"),
                     node=event.get("node"),
+                    step_type=event.get("step_type"),
+                    content=event.get("content"),
+                    metadata=event.get("metadata"),
                     data=event.get("data"),
                 )
                 yield f"data: {stream_event.model_dump_json()}\n\n"

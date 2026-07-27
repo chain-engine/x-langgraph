@@ -53,15 +53,17 @@ class ChatService(Service):
         message = data.get("message")
         session_id = data.get("session_id", "default")
         workflow = data.get("workflow", "intent_classifier")
+        reasoning_config = data.get("reasoning")
 
         logger.info(f"Create chat: message={message[:50]}, session_id={session_id}, workflow={workflow}")
 
-        result = await self._execute_workflow(workflow, message, session_id)
+        result = await self._execute_workflow(workflow, message, session_id, reasoning_config)
 
         return {
             "response": result.get("response", ""),
             "session_id": session_id,
             "node": result.get("node"),
+            "intermediate_steps": result.get("intermediate_steps"),
         }
 
     async def update(self, entity_id: str, data: dict[str, Any]) -> Any:
@@ -114,7 +116,13 @@ class ChatService(Service):
         data = await self._repository.list_states(limit=page_size, offset=offset)
         return {"data": data, "total": len(data), "page": page, "page_size": page_size}
 
-    async def _execute_workflow(self, workflow_name: str, message: str, session_id: str) -> dict[str, Any]:
+    async def _execute_workflow(
+        self,
+        workflow_name: str,
+        message: str,
+        session_id: str,
+        reasoning_config: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         """
         执行工作流
 
@@ -122,6 +130,7 @@ class ChatService(Service):
             workflow_name: 工作流类型
             message: 用户消息
             session_id: 会话ID
+            reasoning_config: 推理配置（可选）
 
         Returns:
             dict: 工作流执行结果
@@ -149,6 +158,8 @@ class ChatService(Service):
 
                 request = self._build_approval_request(message, session_id)
                 result = await ApprovalWorkflow().arun(request, session_id)
+            elif workflow_name in ("react", "plan_execute", "tot"):
+                result = await self._execute_reasoning_workflow(workflow_name, message, session_id, reasoning_config)
             else:
                 # 动态路径：从 DB 查询工作流定义，通过 compiler 编译执行
                 definition = await self._definition_repo.get_by_name(workflow_name)
@@ -192,7 +203,91 @@ class ChatService(Service):
         )
         return result
 
-    async def stream(self, workflow_name: str, message: str, session_id: str) -> AsyncGenerator[dict, None]:
+    async def _execute_reasoning_workflow(
+        self,
+        mode: str,
+        message: str,
+        session_id: str,
+        config_dict: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """执行推理工作流（react / plan_execute / tot）"""
+        from workflows.reasoning.base import ReasoningConfig
+        from workflows.reasoning import ReactWorkflow, create_plan_execute_workflow, create_tot_workflow
+
+        cfg = ReasoningConfig(
+            max_iterations=config_dict.get("max_iterations", 10) if config_dict else 10,
+            timeout_seconds=config_dict.get("timeout_seconds", 300) if config_dict else 300,
+            enable_reflection=config_dict.get("enable_reflection", True) if config_dict else True,
+            llm_provider=config_dict.get("llm_provider", "deepseek") if config_dict else "deepseek",
+            system_prompt=config_dict.get("system_prompt"),
+        )
+
+        state: dict[str, Any] = {
+            "messages": [{"role": "user", "content": message}],
+            "iteration": 0,
+            "max_iterations": cfg.max_iterations,
+            "intermediate_steps": [],
+            "error": None,
+            "session_id": session_id,
+        }
+
+        if mode == "react":
+            workflow = ReactWorkflow(config=cfg)
+            graph = workflow.graph
+        elif mode == "plan_execute":
+            wf = create_plan_execute_workflow(config=cfg)
+            workflow = wf.__enter__()
+            graph = workflow.graph
+        elif mode == "tot":
+            wf = create_tot_workflow(config=cfg)
+            workflow = wf.__enter__()
+            graph = workflow.graph
+            state["depth"] = 0
+            state["max_depth"] = config_dict.get("max_depth", 5) if config_dict else 5
+            state["branches"] = []
+            state["new_branches"] = []
+            state["evaluation_results"] = []
+            state["evaluated_branches"] = []
+            state["best_branch_id"] = None
+        else:
+            return {"response": f"Unknown reasoning mode: {mode}", "node": None}
+
+        try:
+            result = await graph.ainvoke(
+                state,
+                config={"configurable": {"thread_id": session_id}},
+            )
+            # 提取最终响应
+            response = (
+                result.get("final_answer")
+                or result.get("output")
+                or result.get("best_branch_content", "")
+            )
+            if isinstance(result.get("messages"), list) and result.get("messages"):
+                msgs = result["messages"]
+                last = msgs[-1]
+                if isinstance(last, dict):
+                    response = response or last.get("content", "")
+                elif hasattr(last, "content"):
+                    response = response or last.content
+
+            return {
+                "response": response,
+                "node": mode,
+                "intermediate_steps": result.get("intermediate_steps", []),
+                **result,
+            }
+        finally:
+            if mode in ("plan_execute", "tot"):
+                workflow.__exit__(None, None, None)
+
+    async def stream(
+        self,
+        workflow_name: str,
+        message: str,
+        session_id: str,
+        reasoning_config: Optional[Any] = None,
+    ) -> AsyncGenerator[dict, None]:
         """
         流式执行工作流
 
@@ -200,11 +295,20 @@ class ChatService(Service):
             workflow_name: 工作流类型
             message: 用户消息
             session_id: 会话ID
+            reasoning_config: 推理配置
 
         Yields:
             dict: 流式事件
         """
         try:
+            # 推理工作流走独立流式路径
+            if workflow_name in ("react", "plan_execute", "tot"):
+                async for event in self._stream_reasoning_workflow(
+                    workflow_name, message, session_id, reasoning_config
+                ):
+                    yield event
+                return
+
             # 静态预定义工作流（硬编码路径）
             if workflow_name == "customer_service":
                 from workflows.customer_service.workflow import CustomerServiceWorkflow
@@ -236,6 +340,98 @@ class ChatService(Service):
         except Exception as e:
             logger.error(f"Stream workflow execution error: {e}")
             yield {"event": "error", "data": str(e)}
+
+    async def _stream_reasoning_workflow(
+        self,
+        mode: str,
+        message: str,
+        session_id: str,
+        config_dict: Optional[dict[str, Any]] = None,
+    ) -> AsyncGenerator[dict, None]:
+        """流式执行推理工作流"""
+        from workflows.reasoning.base import ReasoningConfig
+        from workflows.reasoning import ReactWorkflow, create_plan_execute_workflow, create_tot_workflow
+
+        cfg = ReasoningConfig(
+            max_iterations=config_dict.get("max_iterations", 10) if config_dict else 10,
+            timeout_seconds=config_dict.get("timeout_seconds", 300) if config_dict else 300,
+            enable_reflection=config_dict.get("enable_reflection", True) if config_dict else True,
+            llm_provider=config_dict.get("llm_provider", "deepseek") if config_dict else "deepseek",
+            system_prompt=config_dict.get("system_prompt"),
+        )
+
+        state: dict[str, Any] = {
+            "messages": [{"role": "user", "content": message}],
+            "iteration": 0,
+            "max_iterations": cfg.max_iterations,
+            "intermediate_steps": [],
+            "error": None,
+            "session_id": session_id,
+        }
+
+        if mode == "react":
+            workflow = ReactWorkflow(config=cfg)
+            graph = workflow.graph
+        elif mode == "plan_execute":
+            wf = create_plan_execute_workflow(config=cfg)
+            workflow = wf.__enter__()
+            graph = workflow.graph
+        elif mode == "tot":
+            wf = create_tot_workflow(config=cfg)
+            workflow = wf.__enter__()
+            graph = workflow.graph
+            state["depth"] = 0
+            state["max_depth"] = config_dict.get("max_depth", 5) if config_dict else 5
+            state["branches"] = []
+            state["new_branches"] = []
+            state["evaluation_results"] = []
+            state["evaluated_branches"] = []
+            state["best_branch_id"] = None
+
+        try:
+            latest_state: dict[str, Any] = {}
+            async for event in graph.astream(state, config={"configurable": {"thread_id": session_id}}, stream_mode="updates"):
+                for node_name, node_output in event.items():
+                    latest_state.update(node_output)
+                    if isinstance(node_output, dict):
+                        steps = node_output.get("intermediate_steps", [])
+                        new_step = steps[-1] if steps else None
+                        if new_step:
+                            yield {
+                                "event": "reasoning_step",
+                                "node": node_name,
+                                "step_type": new_step.get("step_type"),
+                                "content": new_step.get("content"),
+                                "metadata": new_step.get("metadata"),
+                                "data": node_output,
+                            }
+                        else:
+                            yield {
+                                "event": "node_update",
+                                "node": node_name,
+                                "data": node_output,
+                            }
+                    else:
+                        yield {"event": "node_update", "node": node_name, "data": node_output}
+
+            response = latest_state.get("final_answer") or latest_state.get("output", "")
+            if not response and isinstance(latest_state.get("messages"), list):
+                msgs = latest_state["messages"]
+                last = msgs[-1]
+                response = (last.get("content") if isinstance(last, dict) else getattr(last, "content", "")) or ""
+
+            yield {
+                "event": "done",
+                "node": mode,
+                "data": {
+                    "response": response,
+                    "state": latest_state,
+                    "intermediate_steps": latest_state.get("intermediate_steps", []),
+                },
+            }
+        finally:
+            if mode in ("plan_execute", "tot"):
+                workflow.__exit__(None, None, None)
 
     async def _stream_dynamic_workflow(
         self, definition: dict[str, Any], message: str, session_id: str
