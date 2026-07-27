@@ -32,18 +32,25 @@
 
 ### 1. 多种推理模式
 
-```
-workflows/reasoning/
-├── react.py              # ReAct: 推理 → 行动 → 观察 → 反思
-├── tree_of_thought.py    # ToT: 生成 → 评估 → 选择 → 继续探索
-└── plan_execute.py       # Plan: 规划 → 执行 → 反思 → 重规划
-```
+框架内置 **3 种推理模式**，可组合到具体工作流中使用：
 
-| 模式 | 工作流结构 | 适用场景 |
-|------|------------|----------|
-| **ReAct** | `reasoning → acting → observation → reflection` 循环 | 工具调用、搜索增强 |
-| **Tree-of-Thought** | `generate → evaluate → select → ...` 树搜索 | 创意生成、方案探索 |
-| **Plan-and-Execute** | `planner → executor → reflector → replan` | 复杂任务分解执行 |
+| 模式 | 文件 | 工作流结构 | 适用场景 |
+|------|------|------------|----------|
+| **ReAct** | `react.py` | `reasoning → acting → observation → reflection` 循环 | 工具调用、搜索增强 |
+| **Tree-of-Thought** | `tree_of_thought.py` | `generate → evaluate → select → ...` 树搜索 | 创意生成、方案探索 |
+| **Plan-and-Execute** | `plan_execute.py` | `planner → executor → reflector → replan` | 复杂任务分解执行 |
+
+```
+ReAct 推理模式：
+START → reasoning → [FINISH?] → acting → observation → reflection
+         ↑                                              ↓
+         └────────────── (should_continue) ←─────────────┘
+
+Plan-and-Execute 规划执行：
+START → planner → executor → reflector → [needs_replan?] → replan
+                                          ↓
+                                    [完成] → finish
+```
 
 ### 2. 动态分支与条件路由
 
@@ -83,7 +90,7 @@ coordinator → researcher → writer → editor → reviewer
 
 ## 工作流示例
 
-本框架内置 **7 种典型工作流**，覆盖智能客服、RAG 问答、多智能体协作等核心场景：
+本框架内置 **5 种典型工作流**，覆盖智能客服、RAG 问答、多智能体协作等核心场景：
 
 ### 1. 意图分类路由
 
@@ -142,24 +149,6 @@ START → submit → evaluate → [风险评估路由]
                           └→ human_approval → [interrupt] → notify → END
 ```
 **特点**：自动评估 + 风险评估 + Human-in-the-Loop + 通知发送
-
-### 6. ReAct 推理模式
-
-```
-START → reasoning → [FINISH?] → acting → observation → reflection
-         ↑                                                 ↓
-         └────────────── (should_continue) ←───────────────┘
-```
-**特点**：推理 → 行动 → 观察 → 反思循环，支持工具调用
-
-### 7. Plan-and-Execute 规划执行
-
-```
-START → planner → executor → reflector → [needs_replan?] → replan → planner
-                                          ↓
-                                    [完成] → finish → END
-```
-**特点**：任务分解 + 执行追踪 + 反思评估 + 动态重规划
 
 ---
 

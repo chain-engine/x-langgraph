@@ -32,18 +32,25 @@
 
 ### 1. Multiple Reasoning Modes
 
-```
-workflows/reasoning/
-├── react.py              # ReAct: Reason → Act → Observe → Reflect
-├── tree_of_thought.py    # ToT: Generate → Evaluate → Select → Explore
-└── plan_execute.py      # Plan: Plan → Execute → Reflect → Replan
-```
+The framework includes **3 built-in reasoning modes** that can be composed into workflows:
 
-| Mode | Workflow Structure | Use Cases |
-|------|-------------------|-----------|
-| **ReAct** | `reasoning → acting → observation → reflection` loop | Tool calling, search augmentation |
-| **Tree-of-Thought** | `generate → evaluate → select → ...` tree search | Creative generation, solution exploration |
-| **Plan-and-Execute** | `planner → executor → reflector → replan` | Complex task decomposition |
+| Mode | File | Workflow Structure | Use Cases |
+|------|------|-------------------|-----------|
+| **ReAct** | `react.py` | `reasoning → acting → observation → reflection` loop | Tool calling, search augmentation |
+| **Tree-of-Thought** | `tree_of_thought.py` | `generate → evaluate → select → ...` tree search | Creative generation, solution exploration |
+| **Plan-and-Execute** | `plan_execute.py` | `planner → executor → reflector → replan` | Complex task decomposition |
+
+```
+ReAct Reasoning Mode:
+START → reasoning → [FINISH?] → acting → observation → reflection
+         ↑                                              ↓
+         └────────────── (should_continue) ←─────────────┘
+
+Plan-and-Execute:
+START → planner → executor → reflector → [needs_replan?] → replan
+                                          ↓
+                                    [done] → finish
+```
 
 ### 2. Dynamic Branching & Conditional Routing
 
@@ -83,7 +90,7 @@ Supports Handoff mode, parallel tasks, and tool calling.
 
 ## Workflow Examples
 
-This framework includes **7 built-in workflows** covering customer service, RAG Q&A, multi-agent collaboration and more:
+This framework includes **5 built-in workflows** covering customer service, RAG Q&A, multi-agent collaboration and more:
 
 ### 1. Intent Classification Router
 
@@ -142,24 +149,6 @@ START → submit → evaluate → [Risk Assessment Route]
                           └→ human_approval → [interrupt] → notify → END
 ```
 **Features**: Auto evaluation + risk assessment + Human-in-the-Loop + notification
-
-### 6. ReAct Reasoning Mode
-
-```
-START → reasoning → [FINISH?] → acting → observation → reflection
-         ↑                                                 ↓
-         └────────────── (should_continue) ←───────────────┘
-```
-**Features**: Reason → Act → Observe → Reflect loop with tool calling support
-
-### 7. Plan-and-Execute
-
-```
-START → planner → executor → reflector → [needs_replan?] → replan → planner
-                                          ↓
-                                    [done] → finish → END
-```
-**Features**: Task decomposition + execution tracking + reflection + dynamic replanning
 
 ---
 
