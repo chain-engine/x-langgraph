@@ -100,39 +100,29 @@ x-langgraph/
 
 ### 1. System Layered Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       API Layer (api)                           │
-│            chat.py · approval.py · health.py                     │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  Business Logic Layer (services)                 │
-│      ChatService · ApprovalService · WorkflowService             │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   Data Access Layer (repositories)                │
-│                    WorkflowRepository                             │
-└────────────┬───────────────────────────────┬────────────────────┘
-             │                               │
-             ▼                               ▼
-┌─────────────────────────┐       ┌─────────────────────────┐
-│     ORM Layer (models)   │       │ Infrastructure (infras) │
-│     WorkflowModel        │       │   MySQL · Redis         │
-└─────────────────────────┘       └─────────────────────────┘
+```mermaid
+flowchart TB
+    API["API Layer (api)<br>chat.py · approval.py · health.py"]
+    SVC["Business Logic Layer (services)<br>ChatService · ApprovalService · WorkflowService"]
+    REPO["Data Access Layer (repositories)<br>WorkflowRepository"]
+    MODELS["ORM Layer (models)<br>WorkflowModel"]
+    INFRA["Infrastructure Layer (infras)<br>MySQL · Redis"]
 
-Note: Core Support Layer (core: config · logger · middleware) is referenced by all layers
+    API --> SVC
+    SVC --> REPO
+    REPO --> MODELS
+    REPO --> INFRA
+
+    style API fill:#fff3e0
+    style SVC fill:#fff3e0
+    style REPO fill:#fce4ec
+    style MODELS fill:#e3f2fd
+    style INFRA fill:#e3f2fd
 ```
 
-**Layer Dependency Rules**:
+> Note: Core Support Layer (`core`: config · logger · middleware) is referenced by all layers
 
-```
-api → service → repository → models
-                      └→ infras
-```
+**Layer Dependency Rules**: `api → service → repository → models/infras`
 
 - **API Layer**: Parameter receiving, authentication, forwarding
 - **Service Layer**: Business rules, transaction orchestration, multi-repository coordination

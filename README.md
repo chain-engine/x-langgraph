@@ -100,39 +100,29 @@ x-langgraph/
 
 ### 1. 系统分层架构
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     API 接口层 (api)                             │
-│            chat.py · approval.py · health.py                     │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   业务逻辑层 (services)                           │
-│     ChatService · ApprovalService · WorkflowService              │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   数据访问层 (repositories)                      │
-│                    WorkflowRepository                            │
-└────────────┬───────────────────────────────┬────────────────────┘
-             │                               │
-             ▼                               ▼
-┌──────────────────────┐         ┌──────────────────────┐
-│   ORM 实体层 (models) │         │  基础设施层 (infras)  │
-│   WorkflowModel      │         │  MySQL · Redis       │
-└──────────────────────┘         └──────────────────────┘
+```mermaid
+flowchart TB
+    API["API 接口层 (api)<br>chat.py · approval.py · health.py"]
+    SVC["业务逻辑层 (services)<br>ChatService · ApprovalService · WorkflowService"]
+    REPO["数据访问层 (repositories)<br>WorkflowRepository"]
+    MODELS["ORM 实体层 (models)<br>WorkflowModel"]
+    INFRA["基础设施层 (infras)<br>MySQL · Redis"]
 
-注：核心支撑层 (core: config · logger · middleware) 被所有层引用
+    API --> SVC
+    SVC --> REPO
+    REPO --> MODELS
+    REPO --> INFRA
+
+    style API fill:#fff3e0
+    style SVC fill:#fff3e0
+    style REPO fill:#fce4ec
+    style MODELS fill:#e3f2fd
+    style INFRA fill:#e3f2fd
 ```
 
-**层间依赖规则**：
+> 注：核心支撑层 (`core`: config · logger · middleware) 被所有层引用
 
-```
-api → service → repository → models
-                      └→ infras
-```
+**层间依赖规则**：`api → service → repository → models/infras`
 
 - **API 层**：参数接收、鉴权、转发调用
 - **Service 层**：业务规则、事务编排、多仓储联动
