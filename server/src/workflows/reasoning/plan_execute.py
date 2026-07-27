@@ -396,6 +396,7 @@ def create_planner_node(config: ReasoningConfig) -> Callable[[PlanExecuteState],
 
 
 def create_executor_node(
+    config: ReasoningConfig,
     tools: Optional[dict[str, Callable[..., Any] | BaseTool]] = None,
 ) -> Callable[[PlanExecuteState], dict]:
     """
@@ -441,12 +442,17 @@ def create_executor_node(
             + "\n".join(context_lines + tool_lines)
         )
 
-        # 调用 LLM 产出执行结果
+        # 调用 LLM 产出执行结果（带超时）
         try:
-            provider = get_llm_provider(config.llm_provider)
-            response = provider.invoke(
-                [SystemMessage(content=_EXECUTOR_SYSTEM_PROMPT), HumanMessage(content=user_prompt)]
-            )
+            import asyncio
+
+            def _call_llm():
+                p = get_llm_provider(config.llm_provider)
+                return p.invoke(
+                    [SystemMessage(content=_EXECUTOR_SYSTEM_PROMPT), HumanMessage(content=user_prompt)]
+                )
+
+            response = asyncio.run(asyncio.wait_for(asyncio.to_thread(_call_llm), timeout=config.timeout_seconds))
             raw = _extract_message_content(response)
         except Exception as exc:  # noqa: BLE001
             logger.error(f"PlanExecute: Executor LLM 调用失败 - {exc}")
@@ -772,7 +778,7 @@ def create_plan_execute_workflow(
             workflow: StateGraph = StateGraph(PlanExecuteState)
 
             workflow.add_node("planner", create_planner_node(self.config))
-            workflow.add_node("executor", create_executor_node(self.tools))
+            workflow.add_node("executor", create_executor_node(self.config, self.tools))
             workflow.add_node("reflector", create_reflector_node(self.config))
             workflow.add_node("replan", create_replan_node(self.config))
             workflow.add_node("finish", create_finish_node())
