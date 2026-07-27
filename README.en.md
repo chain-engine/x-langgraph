@@ -102,33 +102,46 @@ x-langgraph/
 
 ```mermaid
 flowchart TB
-    API["API Layer (api)<br>chat.py · approval.py · health.py"]
+    API["API Layer (api)<br>chat.py · approval.py · health.py · metrics.py"]
     SVC["Business Logic Layer (services)<br>ChatService · ApprovalService · WorkflowService"]
-    REPO["Data Access Layer (repositories)<br>WorkflowRepository"]
-    MODELS["ORM Layer (models)<br>WorkflowModel"]
-    INFRA["Infrastructure Layer (infras)<br>MySQL · Redis"]
+    WF["Workflow Layer (workflows)<br>ReAct · Tree-of-Thought · Plan-and-Execute<br>Intent Classification · Chatbot · RAG · Multi-Agent · Approval"]
+    REPO["Data Access Layer (repositories)<br>WorkflowRepository · ChatRepository"]
+    MODELS["ORM Layer (models)<br>WorkflowModel · ChatModel"]
+    INFRA["Infrastructure Layer (infras)<br>MySQL · Redis · HTTP Client"]
+    CORE["Core Support Layer (core)<br>config · logger · middleware · container"]
 
     API --> SVC
+    SVC --> WF
     SVC --> REPO
+    WF --> MODELS
     REPO --> MODELS
     REPO --> INFRA
 
+    API -.-> CORE
+    SVC -.-> CORE
+    WF -.-> CORE
+    REPO -.-> CORE
+
     style API fill:#fff3e0
     style SVC fill:#fff3e0
+    style WF fill:#f3e5f5
     style REPO fill:#fce4ec
     style MODELS fill:#e3f2fd
     style INFRA fill:#e3f2fd
+    style CORE fill:#fff9c4
 ```
 
-> Note: Core Support Layer (`core`: config · logger · middleware) is referenced by all layers
+**Layer Dependency Rules**: `api → service → workflows/repositories → models/infras` (`core` referenced by all layers)
 
-**Layer Dependency Rules**: `api → service → repository → models/infras`
+**5 Typical Workflows**:
 
-- **API Layer**: Parameter receiving, authentication, forwarding
-- **Service Layer**: Business rules, transaction orchestration, multi-repository coordination
-- **Repository Layer**: CRUD, multi-table queries, depends on infras for sessions
-- **Models Layer**: Pure data table mapping
-- **Infra Layer**: Third-party client encapsulation. **Never depends on upper layers.**
+| Type | File | Description |
+|------|------|-------------|
+| Intent Classification | `classify.py` | LLM intent classification + 6-category routing |
+| Smart Chatbot | `chatbot.py` | Multi-level routing + Checkpointer persistence |
+| RAG Q&A | `rag.py` | Vector retrieval + context building + LLM generation |
+| Multi-Agent Collaboration | `multi_agent.py` | Handoff mode + 5 roles collaboration |
+| Automated Approval | `approval.py` | Risk assessment + Human-in-the-Loop |
 
 ### 2. Core Business Flows
 

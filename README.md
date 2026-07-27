@@ -102,27 +102,46 @@ x-langgraph/
 
 ```mermaid
 flowchart TB
-    API["API 接口层 (api)<br>chat.py · approval.py · health.py"]
+    API["API 接口层 (api)<br>chat.py · approval.py · health.py · metrics.py"]
     SVC["业务逻辑层 (services)<br>ChatService · ApprovalService · WorkflowService"]
-    REPO["数据访问层 (repositories)<br>WorkflowRepository"]
-    MODELS["ORM 实体层 (models)<br>WorkflowModel"]
-    INFRA["基础设施层 (infras)<br>MySQL · Redis"]
+    WF["工作流层 (workflows)<br>ReAct · Tree-of-Thought · Plan-and-Execute<br>意图分类 · 智能客服 · RAG · 多智能体协作 · 审批"]
+    REPO["数据访问层 (repositories)<br>WorkflowRepository · ChatRepository"]
+    MODELS["ORM 实体层 (models)<br>WorkflowModel · ChatModel"]
+    INFRA["基础设施层 (infras)<br>MySQL · Redis · HTTP Client"]
+    CORE["核心支撑层 (core)<br>config · logger · middleware · container"]
 
     API --> SVC
+    SVC --> WF
     SVC --> REPO
+    WF --> MODELS
     REPO --> MODELS
     REPO --> INFRA
 
+    API -.-> CORE
+    SVC -.-> CORE
+    WF -.-> CORE
+    REPO -.-> CORE
+
     style API fill:#fff3e0
     style SVC fill:#fff3e0
+    style WF fill:#f3e5f5
     style REPO fill:#fce4ec
     style MODELS fill:#e3f2fd
     style INFRA fill:#e3f2fd
+    style CORE fill:#fff9c4
 ```
 
-> 注：核心支撑层 (`core`: config · logger · middleware) 被所有层引用
+**层间依赖规则**：`api → service → workflows/repositories → models/infras`（`core` 被所有层引用）
 
-**层间依赖规则**：`api → service → repository → models/infras`
+**5 类典型工作流**：
+
+| 类别 | 文件 | 描述 |
+|------|------|------|
+| 意图分类路由 | `classify.py` | LLM 意图分类 + 6 类业务分发 |
+| 智能客服 | `chatbot.py` | 多级条件路由 + Checkpointer 持久化 |
+| RAG 文档问答 | `rag.py` | 向量检索 + 上下文构建 + LLM 生成 |
+| 多智能体协作 | `multi_agent.py` | Handoff 模式 + 5 种角色协作 |
+| 自动化审批 | `approval.py` | 风险评估 + Human-in-the-Loop |
 
 - **API 层**：参数接收、鉴权、转发调用
 - **Service 层**：业务规则、事务编排、多仓储联动
