@@ -133,16 +133,6 @@ flowchart TB
 
 **层间依赖规则**：`api → service → workflows/repositories → models/infras`（`core` 被所有层引用）
 
-**5 类典型工作流**：
-
-| 类别 | 文件 | 描述 |
-|------|------|------|
-| 意图分类路由 | `classify.py` | LLM 意图分类 + 6 类业务分发 |
-| 智能客服 | `chatbot.py` | 多级条件路由 + Checkpointer 持久化 |
-| RAG 文档问答 | `rag.py` | 向量检索 + 上下文构建 + LLM 生成 |
-| 多智能体协作 | `multi_agent.py` | Handoff 模式 + 5 种角色协作 |
-| 自动化审批 | `approval.py` | 风险评估 + Human-in-the-Loop |
-
 ### 2. 核心业务流程
 
 #### 工作流执行流程
