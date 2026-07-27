@@ -90,6 +90,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _llm_call(provider_name: str, messages: list, timeout_seconds: int) -> Any:
+    """带超时的 LLM 调用"""
+    import asyncio
+
+    def _call():
+        p = get_llm_provider(provider_name)
+        return p.invoke(messages)
+
+    return asyncio.run(asyncio.wait_for(asyncio.to_thread(_call), timeout=timeout_seconds))
+
+
 def _extract_user_query(state: ReactState) -> str:
     """从状态中提取用户输入"""
     messages = state.get("messages", []) or []
@@ -186,8 +197,7 @@ def create_reasoning_node(config: ReasoningConfig) -> Callable[[ReactState], dic
             messages.append(HumanMessage(content="历史步骤：\n" + "\n".join(history_lines)))
 
         try:
-            provider = get_llm_provider(config.llm_provider)
-            response = provider.invoke(messages)
+            response = _llm_call(config.llm_provider, messages, config.timeout_seconds)
             raw = _extract_message_content(response)
         except Exception as exc:  # noqa: BLE001
             logger.error(f"ReAct: LLM 调用失败 - {exc}")
@@ -348,6 +358,7 @@ def create_reflection_node(config: ReasoningConfig) -> Callable[[ReactState], di
     """
     enable_reflection = config.enable_reflection
     llm_provider = config.llm_provider
+    timeout_seconds = config.timeout_seconds
 
     def reflection_node(state: ReactState) -> dict:
         iteration = state.get("iteration", 0) + 1
@@ -361,13 +372,12 @@ def create_reflection_node(config: ReasoningConfig) -> Callable[[ReactState], di
 
         if enable_reflection and should_continue:
             try:
-                provider = get_llm_provider(llm_provider)
                 prompt = (
                     "你是一个反思代理。基于以下信息判断是否可以结束推理：\n"
                     f"思考: {thought}\n观察: {observation}\n"
                     "请仅回复 JSON：{\"should_continue\": true|false, \"reason\": \"...\"}"
                 )
-                response = provider.invoke([HumanMessage(content=prompt)])
+                response = _llm_call(llm_provider, [HumanMessage(content=prompt)], timeout_seconds)
                 parsed = _parse_llm_response(_extract_message_content(response))
                 should_continue = bool(parsed.get("should_continue", should_continue))
                 reason = str(parsed.get("reason", ""))

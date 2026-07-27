@@ -191,6 +191,17 @@ def _extract_user_query(state: ToTState) -> str:
     return getattr(last, "content", str(last))
 
 
+def _llm_call(provider_name: str, messages: list, timeout_seconds: int) -> Any:
+    """带超时的 LLM 调用"""
+    import asyncio
+
+    def _call():
+        p = get_llm_provider(provider_name)
+        return p.invoke(messages)
+
+    return asyncio.run(asyncio.wait_for(asyncio.to_thread(_call), timeout=timeout_seconds))
+
+
 def _append_step(
     steps: list[StepRecord],
     step_type: str,
@@ -320,12 +331,13 @@ def create_generator_node(config: ReasoningConfig) -> Callable[[ToTState], dict]
                 if config.system_prompt
                 else _GENERATOR_SYSTEM_PROMPT.format(max_branches=max_branches)
             )
-            provider = get_llm_provider(config.llm_provider)
-            response = provider.invoke(
+            response = _llm_call(
+                config.llm_provider,
                 [
                     SystemMessage(content=system_prompt),
                     HumanMessage(content=prompt),
-                ]
+                ],
+                config.timeout_seconds,
             )
             raw = _extract_message_content(response)
         except Exception as exc:  # noqa: BLE001
@@ -430,6 +442,7 @@ def create_evaluator_node(config: ReasoningConfig) -> Callable[[ToTState], dict]
     `evaluated_branches`，并把各分支状态标记为 evaluated。
     """
     llm_provider_name = config.llm_provider
+    timeout_seconds = config.timeout_seconds
 
     def evaluator_node(state: ToTState) -> dict:
         iteration = state.get("iteration", 0)
@@ -468,12 +481,13 @@ def create_evaluator_node(config: ReasoningConfig) -> Callable[[ToTState], dict]
         comment_by_id: dict[str, str] = {}
 
         try:
-            provider = get_llm_provider(llm_provider_name)
-            response = provider.invoke(
+            response = _llm_call(
+                llm_provider_name,
                 [
                     SystemMessage(content=_EVALUATOR_SYSTEM_PROMPT),
                     HumanMessage(content=prompt),
-                ]
+                ],
+                timeout_seconds,
             )
             raw = _extract_message_content(response)
         except Exception as exc:  # noqa: BLE001
@@ -570,6 +584,7 @@ def create_selector_node(config: ReasoningConfig) -> Callable[[ToTState], dict]:
     若 LLM 不可用则退化为按分数最高的本地选择。
     """
     llm_provider_name = config.llm_provider
+    timeout_seconds = config.timeout_seconds
 
     def selector_node(state: ToTState) -> dict:
         iteration = state.get("iteration", 0)
@@ -616,12 +631,13 @@ def create_selector_node(config: ReasoningConfig) -> Callable[[ToTState], dict]:
         reason = ""
 
         try:
-            provider = get_llm_provider(llm_provider_name)
-            response = provider.invoke(
+            response = _llm_call(
+                llm_provider_name,
                 [
                     SystemMessage(content=_SELECTOR_SYSTEM_PROMPT),
                     HumanMessage(content=prompt),
-                ]
+                ],
+                timeout_seconds,
             )
             raw = _extract_message_content(response)
         except Exception as exc:  # noqa: BLE001

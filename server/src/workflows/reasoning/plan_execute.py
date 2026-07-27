@@ -204,6 +204,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _llm_call(provider_name: str, messages: list, timeout_seconds: int) -> Any:
+    """带超时的 LLM 调用"""
+    import asyncio
+
+    def _call():
+        p = get_llm_provider(provider_name)
+        return p.invoke(messages)
+
+    return asyncio.run(asyncio.wait_for(asyncio.to_thread(_call), timeout=timeout_seconds))
+
+
 def _extract_user_query(state: PlanExecuteState) -> str:
     """从状态中提取用户输入"""
     messages = state.get("messages", []) or []
@@ -333,8 +344,7 @@ def create_planner_node(config: ReasoningConfig) -> Callable[[PlanExecuteState],
             messages.append(HumanMessage(content="\n\n".join(context_lines)))
 
         try:
-            provider = get_llm_provider(config.llm_provider)
-            response = provider.invoke(messages)
+            response = _llm_call(config.llm_provider, messages, config.timeout_seconds)
             raw = _extract_message_content(response)
         except Exception as exc:  # noqa: BLE001
             logger.error(f"PlanExecute: Planner LLM 调用失败 - {exc}")
@@ -516,6 +526,7 @@ def create_reflector_node(config: ReasoningConfig) -> Callable[[PlanExecuteState
     """
     enable_reflection = config.enable_reflection
     llm_provider_name = config.llm_provider
+    timeout_seconds = config.timeout_seconds
 
     def reflector_node(state: PlanExecuteState) -> dict:
         iteration = state.get("iteration", 0) + 1
@@ -538,12 +549,13 @@ def create_reflector_node(config: ReasoningConfig) -> Callable[[PlanExecuteState
             ]
             pending_hints: Optional[str] = None
             try:
-                provider = get_llm_provider(llm_provider_name)
-                response = provider.invoke(
+                response = _llm_call(
+                    llm_provider_name,
                     [
                         SystemMessage(content=_REFLECTOR_SYSTEM_PROMPT),
                         HumanMessage(content="\n\n".join(prompt_lines)),
-                    ]
+                    ],
+                    timeout_seconds,
                 )
                 parsed = _parse_json_block(_extract_message_content(response))
                 if isinstance(parsed, dict):
@@ -593,6 +605,7 @@ def create_replan_node(config: ReasoningConfig) -> Callable[[PlanExecuteState], 
     替换 `pending_tasks` 并递增 `replan_count`。
     """
     llm_provider_name = config.llm_provider
+    timeout_seconds = config.timeout_seconds
 
     def replan_node(state: PlanExecuteState) -> dict:
         iteration = state.get("iteration", 0)
@@ -611,12 +624,13 @@ def create_replan_node(config: ReasoningConfig) -> Callable[[PlanExecuteState], 
             prompt_lines.append(f"重规划提示：\n{hints}")
 
         try:
-            provider = get_llm_provider(llm_provider_name)
-            response = provider.invoke(
+            response = _llm_call(
+                llm_provider_name,
                 [
                     SystemMessage(content=_REPLAN_SYSTEM_PROMPT),
                     HumanMessage(content="\n\n".join(prompt_lines)),
-                ]
+                ],
+                timeout_seconds,
             )
             raw = _extract_message_content(response)
         except Exception as exc:  # noqa: BLE001
