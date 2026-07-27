@@ -443,7 +443,7 @@ def create_executor_node(
 
         # 调用 LLM 产出执行结果
         try:
-            provider = get_llm_provider("deepseek")
+            provider = get_llm_provider(config.llm_provider)
             response = provider.invoke(
                 [SystemMessage(content=_EXECUTOR_SYSTEM_PROMPT), HumanMessage(content=user_prompt)]
             )
@@ -530,6 +530,7 @@ def create_reflector_node(config: ReasoningConfig) -> Callable[[PlanExecuteState
                 f"已完成步骤：\n{_format_steps(completed) if completed else '（无）'}",
                 f"当前步骤执行结果：\n{last_result}",
             ]
+            pending_hints: Optional[str] = None
             try:
                 provider = get_llm_provider(llm_provider_name)
                 response = provider.invoke(
@@ -547,7 +548,7 @@ def create_reflector_node(config: ReasoningConfig) -> Callable[[PlanExecuteState
                         # 将 next_hints 暂存到 pending_hints，供下一轮 planner/replan 使用
                         hints = str(parsed.get("next_hints", "")).strip()
                         if hints:
-                            pass  # hints 通过单独的 replan 节点注入
+                            pending_hints = hints
                 else:
                     reflection_text = "（反思结果无法解析）"
             except Exception as exc:  # noqa: BLE001
@@ -561,6 +562,7 @@ def create_reflector_node(config: ReasoningConfig) -> Callable[[PlanExecuteState
         return {
             "iteration": iteration,
             "needs_replan": needs_replan,
+            "pending_hints": pending_hints,
             "reflection_result": reflection_text or ("全部步骤已完成" if is_done else "继续执行"),
             "intermediate_steps": _append_step(
                 history,
