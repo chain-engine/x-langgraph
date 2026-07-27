@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""review-package - Create a review package for a commit range."""
+
+import sys
+import subprocess
+import os
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: review-package <base_commit> <head_commit>", file=sys.stderr)
+        sys.exit(1)
+
+    base = sys.argv[1]
+    head = sys.argv[2]
+
+    repo_root = subprocess.check_output(
+        ["git", "rev-parse", "--show-toplevel"],
+        text=True, encoding="utf-8"
+    ).strip()
+
+    # Get commit log
+    log = subprocess.check_output(
+        ["git", "log", "--oneline", f"{base}..{head}"],
+        text=True, encoding="utf-8"
+    ).strip()
+
+    # Get diff stat
+    stat = subprocess.check_output(
+        ["git", "diff", "--stat", base, head],
+        text=True, encoding="utf-8"
+    ).strip()
+
+    # Get full diff
+    diff = subprocess.check_output(
+        ["git", "diff", "-U10", base, head],
+        text=True, encoding="utf-8"
+    ).strip()
+
+    # Write package
+    output_file = f"{repo_root}/.superpowers/sdd/review-package-{head[:7]}.txt"
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(f"# Review Package: {base[:7]}..{head[:7]}\n\n")
+        f.write(f"# Commits ({len(log.splitlines()) if log else 0}):\n")
+        f.write(log + "\n\n")
+        f.write("# Diff Stat:\n")
+        f.write(stat + "\n\n")
+        f.write("# Full Diff:\n")
+        f.write(diff)
+
+    print(output_file)
+
+if __name__ == "__main__":
+    main()

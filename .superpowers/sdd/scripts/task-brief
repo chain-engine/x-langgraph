@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""task-brief - Extract a task's full text from the plan to a file."""
+
+import sys
+import re
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: task-brief <plan_file> <task_num>", file=sys.stderr)
+        sys.exit(1)
+
+    plan_file = sys.argv[1]
+    task_num = int(sys.argv[2])
+
+    with open(plan_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Find task header
+    pattern = rf"(## Task \d+:.*?(?=\n## |$))"
+    matches = list(re.finditer(pattern, content, re.DOTALL))
+
+    if task_num < 1 or task_num > len(matches):
+        print(f"Task {task_num} not found (1-{len(matches)})", file=sys.stderr)
+        sys.exit(1)
+
+    task_text = matches[task_num - 1].group(1).strip()
+
+    # Write to output file
+    output_file = f".superpowers/sdd/task-{task_num}-brief.md"
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(f"# Task {task_num}: {task_text.splitlines()[0].lstrip('# ')}\n\n")
+        f.write(task_text)
+        f.write("\n\n## Global Constraints\n")
+        # Extract global constraints section
+        gc_match = re.search(r"## Global Constraints\s*\n(.*?)(?=\n---\n|\n## |\Z)", content, re.DOTALL)
+        if gc_match:
+            f.write(gc_match.group(1).strip())
+        f.write("\n")
+
+    print(output_file)
+
+if __name__ == "__main__":
+    main()

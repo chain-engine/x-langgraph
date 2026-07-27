@@ -1,0 +1,315 @@
+# Review Package: 80770d1..03f5cc1
+
+# Commits (1):
+03f5cc1 fix(reasoning): fix react.py spec deviations and quality issues
+
+# Diff Stat:
+server/src/workflows/reasoning/react.py | 83 +++++++++++++++++----------------
+ 1 file changed, 44 insertions(+), 39 deletions(-)
+
+# Full Diff:
+diff --git a/server/src/workflows/reasoning/react.py b/server/src/workflows/reasoning/react.py
+index 2e5e657..c9b2309 100644
+--- a/server/src/workflows/reasoning/react.py
++++ b/server/src/workflows/reasoning/react.py
+@@ -1,68 +1,66 @@
+ # -*- coding: utf-8 -*-
+ """
+ ReAct (Reasoning + Acting) 模式
+ 
+ 实现经典的 ReAct 推理循环：思考（Reasoning）→ 行动（Action）→ 观察（Observation）→ 反思（Reflection），
+ 直到满足结束条件或达到最大迭代次数。
+ 
+ 工作流：
+ 
+-    [reasoning] → [action] → [observation] → [reflect]
++    [reasoning] → [acting] → [observation] → [reflection]
+          ↑                                     ↓
+          └────────────── (should_continue) ←───┘
+                             ↓
+                          [finish]
+ 
+ 节点职责：
+ - reasoning: 让 LLM 分析当前状态、产生思考（thought），并决定下一步行动（action）
+-- action: 根据 LLM 决策执行具体工具
++- acting: 根据 LLM 决策执行具体工具
+ - observation: 收集工具执行结果，更新到状态
+-- reflect: 对当前迭代进行反思，决定是否继续
++- reflection: 对当前迭代进行反思，决定是否继续
+ - finish: 输出最终答案
+ """
+ 
+ import json
+ import re
+ from datetime import datetime, timezone
+-from typing import Any, Callable, Optional
++from typing import Any, Callable, NotRequired, Optional
+ 
+-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
++from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
++from langchain_core.tools import BaseTool
+ from langgraph.checkpoint.base import BaseCheckpointSaver
+ from langgraph.checkpoint.memory import MemorySaver
+ from langgraph.graph import END, StateGraph
+ 
+ from core.logger import logger
+ from llms.providers import get_llm_provider
+ from workflows.base import BaseWorkflow
+ from workflows.reasoning.base import (
+     BaseReasoningState,
+     ReasoningConfig,
+     StepRecord,
+ )
+ 
+ 
+ # ===== 状态类型别名（便于类型提示）=====
+ 
+-ReactState = BaseReasoningState
+-"""
+-ReAct 推理状态
+-
+-继承自 BaseReasoningState，扩展以下字段：
+-- thought: 当前思考内容
+-- action: 当前要执行的工具名
+-- action_input: 工具调用参数
+-- observation: 工具执行结果
+-- should_continue: 是否继续循环
+-- final_answer: 最终答案
+-- tool_results: 工具调用结果列表
+-"""
++class ReactState(BaseReasoningState):
++    """ReAct 推理状态"""
++
++    thought: NotRequired[Optional[str]]
++    action: NotRequired[Optional[str]]
++    action_input: NotRequired[Optional[str]]
++    observation: NotRequired[Optional[str]]
++    should_continue: NotRequired[Optional[bool]]
++    final_answer: NotRequired[Optional[str]]
++    tool_results: NotRequired[Optional[dict[str, Any]]]
+ 
+ 
+ # ===== 提示模板 =====
+ 
+ _REACT_SYSTEM_PROMPT = """你是一个 ReAct (Reasoning + Acting) 推理代理。
+ 
+ 请严格按以下 JSON 格式输出你的每一步推理：
+ 
+ ```json
+ {
+@@ -74,22 +72,21 @@ _REACT_SYSTEM_PROMPT = """你是一个 ReAct (Reasoning + Acting) 推理代理
+ ```
+ 
+ 规则：
+ 1. 每一步都必须先输出 thought，说明你的推理逻辑
+ 2. action 必须是已注册的工具名之一，或 FINISH
+ 3. 当你可以直接回答用户问题时，将 action 设为 FINISH 并提供 final_answer
+ 4. 严格输出 JSON，不要包含 JSON 之外的解释文字
+ """
+ 
+ 
+-_THOUGHT_PATTERN = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
+-_FALLBACK_JSON_PATTERN = re.compile(r"\{.*?\"action\".*?\}", re.DOTALL)
++_THOUGHT_PATTERN = re.compile(r"```json\s*(.*?)\s*```", re.DOTALL)
+ 
+ 
+ # ===== 辅助函数 =====
+ 
+ 
+ def _now_iso() -> str:
+     """获取当前 UTC 时间的 ISO 格式字符串"""
+     return datetime.now(timezone.utc).isoformat()
+ 
+ 
+@@ -124,30 +121,31 @@ def _append_step(
+ def _parse_llm_response(raw: str) -> dict[str, Any]:
+     """
+     解析 LLM 返回的 JSON 响应
+ 
+     优先从 ```json 代码块提取，失败时回退到整段文本匹配。
+     """
+     if not raw:
+         return {"thought": "", "action": "FINISH", "is_final": True, "final_answer": ""}
+ 
+     match = _THOUGHT_PATTERN.search(raw)
+-    candidate = match.group(1) if match else None
+-    if candidate is None:
+-        match = _FALLBACK_JSON_PATTERN.search(raw)
+-        candidate = match.group(0) if match else None
++    candidate = match.group(1).strip() if match else raw[raw.find("{") :] if "{" in raw else None
+ 
+     if candidate is None:
+         return {"thought": raw.strip(), "action": "FINISH", "is_final": True, "final_answer": raw.strip()}
+ 
+     try:
+-        return json.loads(candidate)
++        start = candidate.find("{")
++        if start < 0:
++            raise json.JSONDecodeError("JSON object not found", candidate, 0)
++        parsed, _ = json.JSONDecoder().raw_decode(candidate[start:])
++        return parsed
+     except json.JSONDecodeError:
+         return {"thought": raw.strip(), "action": "FINISH", "is_final": True, "final_answer": raw.strip()}
+ 
+ 
+ def _extract_message_content(response: Any) -> str:
+     """兼容不同形态的 LLM 响应"""
+     if response is None:
+         return ""
+     if isinstance(response, str):
+         return response
+@@ -167,21 +165,21 @@ def create_reasoning_node(config: ReasoningConfig) -> Callable[[ReactState], dic
+     调用 LLM 进行思考并产生下一步行动决策。
+     """
+ 
+     def reasoning_node(state: ReactState) -> dict:
+         iteration = state.get("iteration", 0)
+         logger.info(f"ReAct: 推理节点 [迭代 {iteration + 1}/{state.get('max_iterations', config.max_iterations)}]")
+ 
+         user_query = _extract_user_query(state)
+         system_prompt = config.system_prompt or _REACT_SYSTEM_PROMPT
+ 
+-        messages: list[BaseMessage] = [HumanMessage(content=system_prompt)]
++        messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
+         if user_query:
+             messages.append(HumanMessage(content=user_query))
+ 
+         # 注入历史步骤上下文
+         history = state.get("intermediate_steps", []) or []
+         if history:
+             history_lines = [
+                 f"[{i + 1}] ({s.get('step_type', '')}) {s.get('content', '')}"
+                 for i, s in enumerate(history)
+             ]
+@@ -190,20 +188,26 @@ def create_reasoning_node(config: ReasoningConfig) -> Callable[[ReactState], dic
+         try:
+             provider = get_llm_provider(config.llm_provider)
+             response = provider.invoke(messages)
+             raw = _extract_message_content(response)
+         except Exception as exc:  # noqa: BLE001
+             logger.error(f"ReAct: LLM 调用失败 - {exc}")
+             return {
+                 "error": f"LLM 调用失败: {exc}",
+                 "final_answer": f"[推理失败] {exc}",
+                 "should_continue": False,
++                "intermediate_steps": _append_step(
++                    state.get("intermediate_steps", []) or [],
++                    "reasoning",
++                    f"LLM 调用失败: {exc}",
++                    {"error": str(exc)},
++                ),
+             }
+ 
+         parsed = _parse_llm_response(raw)
+         thought = str(parsed.get("thought", "")).strip()
+         action = str(parsed.get("action", "FINISH")).strip() or "FINISH"
+         action_input = parsed.get("action_input") if isinstance(parsed.get("action_input"), dict) else {}
+         is_final = bool(parsed.get("is_final", False)) or action.upper() == "FINISH"
+         final_answer = parsed.get("final_answer")
+ 
+         updates: dict[str, Any] = {
+@@ -230,30 +234,31 @@ def create_reasoning_node(config: ReasoningConfig) -> Callable[[ReactState], dic
+             )
+ 
+         if is_final:
+             updates["messages"] = [AIMessage(content=updates["final_answer"])]
+ 
+         return updates
+ 
+     return reasoning_node
+ 
+ 
+-def create_action_node(tools: Optional[dict[str, Callable[..., Any]]] = None) -> Callable[[ReactState], dict]:
++def create_action_node(tools: Optional[dict[str, Callable[..., Any] | BaseTool]] = None) -> Callable[[ReactState], dict]:
+     """
+-    创建 action 节点
++    创建 acting 节点
+ 
+-    执行 LLM 选择的工具。tools 是 name -> callable 的映射。
++    执行 LLM 选择的工具。tools 是 name -> callable 或 BaseTool 的映射。
+     如果 action 指定的工具未注册，则记录错误并允许反思后退出。
+     """
+-    registry = tools or {}
++    registry = {tool.name: tool for tool in (tools or {}).values() if isinstance(tool, BaseTool)}
++    registry.update({name: tool for name, tool in (tools or {}).items() if not isinstance(tool, BaseTool)})
+ 
+-    def action_node(state: ReactState) -> dict:
++    def acting_node(state: ReactState) -> dict:
+         action = state.get("action")
+         if not action:
+             logger.warning("ReAct: action 节点收到空 action，跳过执行")
+             return {"observation": "无可执行工具（action 为空）", "error": "action 为空"}
+ 
+         logger.info(f"ReAct: 执行工具 {action}")
+         params = state.get("action_input") or {}
+         iteration = state.get("iteration", 0)
+ 
+         tool = registry.get(action)
+@@ -265,21 +270,21 @@ def create_action_node(tools: Optional[dict[str, Callable[..., Any]]] = None) ->
+                 "error": observation,
+                 "intermediate_steps": _append_step(
+                     state.get("intermediate_steps", []) or [],
+                     "action",
+                     observation,
+                     {"iteration": iteration, "tool": action},
+                 ),
+             }
+ 
+         try:
+-            result = tool(**params) if isinstance(params, dict) else tool(params)
++            result = tool.invoke(params) if isinstance(tool, BaseTool) else (tool(**params) if isinstance(params, dict) else tool(params))
+             observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+         except Exception as exc:  # noqa: BLE001
+             observation = f"工具执行失败: {exc}"
+             logger.error(f"ReAct: 工具 {action} 执行失败 - {exc}")
+             return {
+                 "observation": observation,
+                 "error": observation,
+                 "intermediate_steps": _append_step(
+                     state.get("intermediate_steps", []) or [],
+                     "action",
+@@ -457,39 +462,39 @@ class ReactWorkflow(BaseWorkflow):
+ 
+         workflow: StateGraph = StateGraph(ReactState)
+ 
+         reasoning_node = create_reasoning_node(self.config)
+         action_node = create_action_node(self.tools)
+         observation_node = create_observation_node()
+         reflection_node = create_reflection_node(self.config)
+         finish_node = create_finish_node()
+ 
+         workflow.add_node("reasoning", reasoning_node)
+-        workflow.add_node("action", action_node)
++        workflow.add_node("acting", action_node)
+         workflow.add_node("observation", observation_node)
+-        workflow.add_node("reflect", reflection_node)
++        workflow.add_node("reflection", reflection_node)
+         workflow.add_node("finish", finish_node)
+ 
+         workflow.set_entry_point("reasoning")
+ 
+         # reasoning → action（除非推理阶段已经决定结束）
+         workflow.add_conditional_edges(
+             "reasoning",
+-            lambda s: "action" if s.get("action") else "finish",
+-            {"action": "action", "finish": "finish"},
++            lambda s: "acting" if s.get("action") else "finish",
++            {"acting": "acting", "finish": "finish"},
+         )
+ 
+-        workflow.add_edge("action", "observation")
+-        workflow.add_edge("observation", "reflect")
++        workflow.add_edge("acting", "observation")
++        workflow.add_edge("observation", "reflection")
+ 
+         workflow.add_conditional_edges(
+-            "reflect",
++            "reflection",
+             react_router,
+             {"reasoning": "reasoning", "finish": "finish"},
+         )
+ 
+         workflow.add_edge("finish", END)
+ 
+         checkpointer = self.checkpointer or MemorySaver()
+         return workflow.compile(checkpointer=checkpointer)
