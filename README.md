@@ -98,37 +98,50 @@ x-langgraph/
 
 ## 系统架构
 
-### 1. 分层架构
+### 1. 系统分层架构
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      API 接口层 (api)                            │
-│         chat.py │ approval.py │ health.py │ metrics.py           │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    业务逻辑层 (services)                          │
-│         ChatService │ ApprovalService │ WorkflowService          │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    数据访问层 (repositories)                       │
-│                    WorkflowRepository                            │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              ▼              ▼              ▼
-┌─────────────────┐ ┌───────────────┐ ┌──────────────────────┐
-│  ORM 实体层     │ │  基础设施层    │ │    核心支撑层         │
-│    (models)    │ │   (infras)    │ │      (core)          │
-│                │ │               │ │                      │
-│ Workflow Model │ │ MySQL Session │ │ config.py            │
-│                │ │ Redis Client │ │ logger.py            │
-│                │ │ HTTP Client  │ │ middleware.py         │
-│                │ │               │ │ container.py         │
-└─────────────────┘ └───────────────┘ └──────────────────────┘
+```mermaid
+flowchart TB
+    subgraph "API 接口层 (api)"
+        A1["chat.py"]
+        A2["approval.py"]
+        A3["health.py"]
+        A4["metrics.py"]
+    end
+
+    subgraph "业务逻辑层 (services)"
+        S1["ChatService"]
+        S2["ApprovalService"]
+        S3["WorkflowService"]
+    end
+
+    subgraph "数据访问层 (repositories)"
+        R1["WorkflowRepository"]
+    end
+
+    subgraph "基础设施层 (infras)"
+        I1["MySQL"]
+        I2["Redis"]
+        I3["HTTP Client"]
+    end
+
+    subgraph "ORM 实体层 (models)"
+        M1["WorkflowModel"]
+    end
+
+    subgraph "核心支撑层 (core)"
+        C1["config.py"]
+        C2["logger.py"]
+        C3["middleware.py"]
+    end
+
+    A1 & A2 & A3 & A4 --> S1 & S2 & S3
+    S1 & S2 & S3 --> R1
+    R1 --> M1
+    R1 --> I1 & I2 & I3
+    A1 & A2 & A3 & A4 -.-> C1 & C2 & C3
+    S1 & S2 & S3 -.-> C1 & C2 & C3
+    R1 -.-> C1 & C2 & C3
 ```
 
 **层间依赖规则**：
@@ -211,72 +224,49 @@ flowchart TD
 
 ### 3. 模块依赖关系
 
-```mermaid
-graph LR
-    subgraph "前端 (web)"
-        WEB[Vue 3 应用]
-    end
-
-    subgraph "后端 (server/src)"
-        subgraph "接口层"
-            API[api/routes]
-        end
-
-        subgraph "业务层"
-            SVC[services]
-        end
-
-        subgraph "数据层"
-            REPO[repositories]
-            MODELS[models]
-        end
-
-        subgraph "基础设施"
-            INFRA[infras]
-        end
-
-        subgraph "核心支撑"
-            CORE[core]
-        end
-
-        subgraph "工作流 ⭐"
-            WF[workflows]
-            WF --> BASE[base.py]
-            WF --> REASONING[reasoning/]
-            WF --> CHECKPOINT[checkpointer.py]
-        end
-
-        subgraph "LLM"
-            LLM[llm/]
-        end
-
-        subgraph "工具"
-            TOOLS[tools/]
-        end
-    end
-
-    API --> SVC
-    SVC --> REPO
-    REPO --> MODELS
-    REPO --> INFRA
-    SVC --> WF
-    SVC --> LLM
-    WF --> LLM
-    WF --> TOOLS
-    API -.-> CORE
-    SVC -.-> CORE
-    REPO -.-> CORE
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              前端 (web)                                   │
+│                           Vue 3 应用                                      │
+└────────────────────────────────┬─────────────────────────────────────────┘
+                                 │ HTTP API
+┌────────────────────────────────▼─────────────────────────────────────────┐
+│                              后端 (server/src)                            │
+│                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                      接口层 (api/routes)                           │   │
+│  │              chat.py │ approval.py │ health.py                   │   │
+│  └─────────────────────────────────┬──────────────────────────────────┘   │
+│                                    │                                      │
+│  ┌─────────────────────────────────▼──────────────────────────────────┐   │
+│  │                      业务逻辑层 (services)                         │   │
+│  │         ChatService │ ApprovalService │ WorkflowService           │   │
+│  └─┬───────────┬──────────────┬─────────────────┬──────────────────┘   │
+│    │           │              │                 │                       │
+│    ▼           ▼              ▼                 ▼                       │
+│  ┌────────┐ ┌────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐   │
+│  │workflows│ │  llm   │ │ repositories│ │  schemas  │ │     core     │   │
+│  │  ⭐    │ │        │ │             │ │           │ │(config/logger│   │
+│  │        │ │        │ │             │ │           │ │ middleware)  │   │
+│  └────┬───┘ └────────┘ └──────┬──────┘ └───────────┘ └──────────────┘   │
+│       │                        │                                        │
+│       ▼                        ▼                                        │
+│  ┌────────────┐         ┌──────────────┐                               │
+│  │   tools    │         │  infras      │                               │
+│  │            │         │ mysql/redis   │                               │
+│  └────────────┘         └──────────────┘                               │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**依赖说明**：
+**依赖关系表**：
 
-| 层级 | 依赖关系 |
-|------|----------|
-| `workflows` | 依赖 `llm`、`tools`、`core/config` |
-| `services` | 依赖 `workflows`、`llm`、`repositories` |
-| `repositories` | 依赖 `models`、`infras/mysql` |
-| `api` | 依赖 `services`、`schemas` |
-| `core` | 被所有层级引用，但不反向依赖 |
+| 调用方 | 依赖模块 | 说明 |
+|--------|----------|------|
+| `api` | `services`, `schemas` | 参数校验、路由转发 |
+| `services` | `workflows`, `llm`, `repositories` | 业务编排 |
+| `workflows` | `llm`, `tools`, `core/config` | 工作流执行 |
+| `repositories` | `models`, `infras/mysql` | 数据持久化 |
+| `core` | 无反向依赖 | 被各层引用 |
 
 ---
 

@@ -98,38 +98,50 @@ x-langgraph/
 
 ## System Architecture
 
-### 1. Layered Architecture
+### 1. System Layered Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      API Layer (api)                             │
-│         chat.py │ approval.py │ health.py │ metrics.py            │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Business Logic Layer (services)                 │
-│         ChatService │ ApprovalService │ WorkflowService            │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Data Access Layer (repositories)                │
-│                    WorkflowRepository                             │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              ▼              ▼              ▼
-┌─────────────────┐ ┌───────────────┐ ┌──────────────────────┐
-│    ORM Layer    │ │  Infrastructure │ │    Core Support     │
-│    (models)     │ │     (infras)    │ │      (core)         │
-│                 │ │                 │ │                      │
-│ Workflow Model  │ │ MySQL Session   │ │ config.py           │
-│                 │ │ Redis Client    │ │ logger.py           │
-│                 │ │ HTTP Client    │ │ middleware.py       │
-│                 │ │                │ │ container.py        │
-└─────────────────┘ └───────────────┘ └──────────────────────┘
-```
+```mermaid
+flowchart TB
+    subgraph "API Layer (api)"
+        A1["chat.py"]
+        A2["approval.py"]
+        A3["health.py"]
+        A4["metrics.py"]
+    end
+
+    subgraph "Business Logic Layer (services)"
+        S1["ChatService"]
+        S2["ApprovalService"]
+        S3["WorkflowService"]
+    end
+
+    subgraph "Data Access Layer (repositories)"
+        R1["WorkflowRepository"]
+    end
+
+    subgraph "Infrastructure Layer (infras)"
+        I1["MySQL"]
+        I2["Redis"]
+        I3["HTTP Client"]
+    end
+
+    subgraph "ORM Layer (models)"
+        M1["WorkflowModel"]
+    end
+
+    subgraph "Core Support Layer (core)"
+        C1["config.py"]
+        C2["logger.py"]
+        C3["middleware.py"]
+    end
+
+    A1 & A2 & A3 & A4 --> S1 & S2 & S3
+    S1 & S2 & S3 --> R1
+    R1 --> M1
+    R1 --> I1 & I2 & I3
+    A1 & A2 & A3 & A4 -.-> C1 & C2 & C3
+    S1 & S2 & S3 -.-> C1 & C2 & C3
+    R1 -.-> C1 & C2 & C3
 
 **Layer Dependency Rules**:
 
@@ -211,72 +223,49 @@ flowchart TD
 
 ### 3. Module Dependency Graph
 
-```mermaid
-graph LR
-    subgraph "Frontend (web)"
-        WEB[Vue 3 App]
-    end
-
-    subgraph "Backend (server/src)"
-        subgraph "API Layer"
-            API[api/routes]
-        end
-
-        subgraph "Service Layer"
-            SVC[services]
-        end
-
-        subgraph "Data Layer"
-            REPO[repositories]
-            MODELS[models]
-        end
-
-        subgraph "Infrastructure"
-            INFRA[infras]
-        end
-
-        subgraph "Core"
-            CORE[core]
-        end
-
-        subgraph "Workflows ⭐"
-            WF[workflows]
-            WF --> BASE[base.py]
-            WF --> REASONING[reasoning/]
-            WF --> CHECKPOINT[checkpointer.py]
-        end
-
-        subgraph "LLM"
-            LLM[llm/]
-        end
-
-        subgraph "Tools"
-            TOOLS[tools/]
-        end
-    end
-
-    API --> SVC
-    SVC --> REPO
-    REPO --> MODELS
-    REPO --> INFRA
-    SVC --> WF
-    SVC --> LLM
-    WF --> LLM
-    WF --> TOOLS
-    API -.-> CORE
-    SVC -.-> CORE
-    REPO -.-> CORE
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              Frontend (web)                              │
+│                           Vue 3 Application                              │
+└────────────────────────────────┬─────────────────────────────────────────┘
+                                 │ HTTP API
+┌────────────────────────────────▼─────────────────────────────────────────┐
+│                              Backend (server/src)                        │
+│                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                      API Layer (api/routes)                      │   │
+│  │              chat.py │ approval.py │ health.py                   │   │
+│  └─────────────────────────────────┬──────────────────────────────────┘   │
+│                                    │                                      │
+│  ┌─────────────────────────────────▼──────────────────────────────────┐   │
+│  │                   Business Logic Layer (services)                 │   │
+│  │         ChatService │ ApprovalService │ WorkflowService           │   │
+│  └─┬───────────┬──────────────┬─────────────────┬──────────────────┘   │
+│    │           │              │                 │                       │
+│    ▼           ▼              ▼                 ▼                       │
+│  ┌────────┐ ┌────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐   │
+│  │workflows│ │  llm   │ │ repositories│ │  schemas  │ │     core     │   │
+│  │  ⭐    │ │        │ │             │ │           │ │(config/logger│   │
+│  │        │ │        │ │             │ │           │ │ middleware)  │   │
+│  └────┬───┘ └────────┘ └──────┬──────┘ └───────────┘ └──────────────┘   │
+│       │                        │                                        │
+│       ▼                        ▼                                        │
+│  ┌────────────┐         ┌──────────────┐                               │
+│  │   tools    │         │  infras      │                               │
+│  │            │         │ mysql/redis   │                               │
+│  └────────────┘         └──────────────┘                               │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Dependency Table**:
 
-| Layer | Dependencies |
-|-------|-------------|
-| `workflows` | depends on `llm`, `tools`, `core/config` |
-| `services` | depends on `workflows`, `llm`, `repositories` |
-| `repositories` | depends on `models`, `infras/mysql` |
-| `api` | depends on `services`, `schemas` |
-| `core` | referenced by all layers, never depends on them |
+| Caller | Dependencies | Description |
+|--------|--------------|-------------|
+| `api` | `services`, `schemas` | Parameter validation, routing |
+| `services` | `workflows`, `llm`, `repositories` | Business orchestration |
+| `workflows` | `llm`, `tools`, `core/config` | Workflow execution |
+| `repositories` | `models`, `infras/mysql` | Data persistence |
+| `core` | No reverse dependencies | Referenced by all layers |
 
 ---
 
