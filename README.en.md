@@ -100,61 +100,44 @@ x-langgraph/
 
 ### 1. System Layered Architecture
 
-```mermaid
-flowchart TB
-    subgraph "API Layer (api)"
-        A1["chat.py"]
-        A2["approval.py"]
-        A3["health.py"]
-        A4["metrics.py"]
-    end
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       API Layer (api)                           │
+│            chat.py · approval.py · health.py                     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Business Logic Layer (services)                 │
+│      ChatService · ApprovalService · WorkflowService             │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Data Access Layer (repositories)                │
+│                    WorkflowRepository                             │
+└────────────┬───────────────────────────────┬────────────────────┘
+             │                               │
+             ▼                               ▼
+┌─────────────────────────┐       ┌─────────────────────────┐
+│     ORM Layer (models)   │       │ Infrastructure (infras) │
+│     WorkflowModel        │       │   MySQL · Redis         │
+└─────────────────────────┘       └─────────────────────────┘
 
-    subgraph "Business Logic Layer (services)"
-        S1["ChatService"]
-        S2["ApprovalService"]
-        S3["WorkflowService"]
-    end
-
-    subgraph "Data Access Layer (repositories)"
-        R1["WorkflowRepository"]
-    end
-
-    subgraph "Infrastructure Layer (infras)"
-        I1["MySQL"]
-        I2["Redis"]
-        I3["HTTP Client"]
-    end
-
-    subgraph "ORM Layer (models)"
-        M1["WorkflowModel"]
-    end
-
-    subgraph "Core Support Layer (core)"
-        C1["config.py"]
-        C2["logger.py"]
-        C3["middleware.py"]
-    end
-
-    A1 & A2 & A3 & A4 --> S1 & S2 & S3
-    S1 & S2 & S3 --> R1
-    R1 --> M1
-    R1 --> I1 & I2 & I3
-    A1 & A2 & A3 & A4 -.-> C1 & C2 & C3
-    S1 & S2 & S3 -.-> C1 & C2 & C3
-    R1 -.-> C1 & C2 & C3
+Note: Core Support Layer (core: config · logger · middleware) is referenced by all layers
+```
 
 **Layer Dependency Rules**:
 
 ```
-api → service → repository
-            repository → models
-            repository → infras
+api → service → repository → models
+                      └→ infras
 ```
 
-- **API Layer**: Parameter receiving, authentication, forwarding. No business logic.
-- **Service Layer**: Business rules, transaction orchestration, multi-repository coordination.
-- **Repository Layer**: CRUD encapsulation, multi-table queries, depends on infras for sessions.
-- **Models Layer**: Pure data table mapping, no business logic.
+- **API Layer**: Parameter receiving, authentication, forwarding
+- **Service Layer**: Business rules, transaction orchestration, multi-repository coordination
+- **Repository Layer**: CRUD, multi-table queries, depends on infras for sessions
+- **Models Layer**: Pure data table mapping
 - **Infra Layer**: Third-party client encapsulation. **Never depends on upper layers.**
 
 ### 2. Core Business Flows
@@ -223,38 +206,28 @@ flowchart TD
 
 ### 3. Module Dependency Graph
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                              Frontend (web)                              │
-│                           Vue 3 Application                              │
-└────────────────────────────────┬─────────────────────────────────────────┘
-                                 │ HTTP API
-┌────────────────────────────────▼─────────────────────────────────────────┐
-│                              Backend (server/src)                        │
-│                                                                          │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                      API Layer (api/routes)                      │   │
-│  │              chat.py │ approval.py │ health.py                   │   │
-│  └─────────────────────────────────┬──────────────────────────────────┘   │
-│                                    │                                      │
-│  ┌─────────────────────────────────▼──────────────────────────────────┐   │
-│  │                   Business Logic Layer (services)                 │   │
-│  │         ChatService │ ApprovalService │ WorkflowService           │   │
-│  └─┬───────────┬──────────────┬─────────────────┬──────────────────┘   │
-│    │           │              │                 │                       │
-│    ▼           ▼              ▼                 ▼                       │
-│  ┌────────┐ ┌────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │workflows│ │  llm   │ │ repositories│ │  schemas  │ │     core     │   │
-│  │  ⭐    │ │        │ │             │ │           │ │(config/logger│   │
-│  │        │ │        │ │             │ │           │ │ middleware)  │   │
-│  └────┬───┘ └────────┘ └──────┬──────┘ └───────────┘ └──────────────┘   │
-│       │                        │                                        │
-│       ▼                        ▼                                        │
-│  ┌────────────┐         ┌──────────────┐                               │
-│  │   tools    │         │  infras      │                               │
-│  │            │         │ mysql/redis   │                               │
-│  └────────────┘         └──────────────┘                               │
-└──────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    WEB["Frontend (web)<br>Vue 3"] -->|"HTTP"| API
+
+    API["api/routes"] --> SVC
+    SVC["services"] --> WF
+    SVC --> LLM
+    SVC --> REPO
+    WF --> LLM
+    WF --> TOOLS
+    REPO --> MODELS
+    REPO --> INFRA
+
+    style WEB fill:#e1f5fe
+    style API fill:#fff3e0
+    style SVC fill:#fff3e0
+    style WF fill:#f3e5f5
+    style LLM fill:#e8f5e9
+    style REPO fill:#fce4ec
+    style MODELS fill:#fce4ec
+    style INFRA fill:#fce4ec
+    style TOOLS fill:#e8f5e9
 ```
 
 **Dependency Table**:

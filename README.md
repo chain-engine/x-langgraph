@@ -100,62 +100,44 @@ x-langgraph/
 
 ### 1. 系统分层架构
 
-```mermaid
-flowchart TB
-    subgraph "API 接口层 (api)"
-        A1["chat.py"]
-        A2["approval.py"]
-        A3["health.py"]
-        A4["metrics.py"]
-    end
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     API 接口层 (api)                             │
+│            chat.py · approval.py · health.py                     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   业务逻辑层 (services)                           │
+│     ChatService · ApprovalService · WorkflowService              │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   数据访问层 (repositories)                      │
+│                    WorkflowRepository                            │
+└────────────┬───────────────────────────────┬────────────────────┘
+             │                               │
+             ▼                               ▼
+┌──────────────────────┐         ┌──────────────────────┐
+│   ORM 实体层 (models) │         │  基础设施层 (infras)  │
+│   WorkflowModel      │         │  MySQL · Redis       │
+└──────────────────────┘         └──────────────────────┘
 
-    subgraph "业务逻辑层 (services)"
-        S1["ChatService"]
-        S2["ApprovalService"]
-        S3["WorkflowService"]
-    end
-
-    subgraph "数据访问层 (repositories)"
-        R1["WorkflowRepository"]
-    end
-
-    subgraph "基础设施层 (infras)"
-        I1["MySQL"]
-        I2["Redis"]
-        I3["HTTP Client"]
-    end
-
-    subgraph "ORM 实体层 (models)"
-        M1["WorkflowModel"]
-    end
-
-    subgraph "核心支撑层 (core)"
-        C1["config.py"]
-        C2["logger.py"]
-        C3["middleware.py"]
-    end
-
-    A1 & A2 & A3 & A4 --> S1 & S2 & S3
-    S1 & S2 & S3 --> R1
-    R1 --> M1
-    R1 --> I1 & I2 & I3
-    A1 & A2 & A3 & A4 -.-> C1 & C2 & C3
-    S1 & S2 & S3 -.-> C1 & C2 & C3
-    R1 -.-> C1 & C2 & C3
+注：核心支撑层 (core: config · logger · middleware) 被所有层引用
 ```
 
 **层间依赖规则**：
 
 ```
-api → service → repository
-            repository → models
-            repository → infras
+api → service → repository → models
+                      └→ infras
 ```
 
-- **API 层**：参数接收、鉴权、转发调用，不含业务逻辑
+- **API 层**：参数接收、鉴权、转发调用
 - **Service 层**：业务规则、事务编排、多仓储联动
-- **Repository 层**：封装 CRUD、多表查询，依赖 infras 获取会话
-- **Models 层**：纯数据表映射，无业务逻辑
+- **Repository 层**：CRUD、多表查询，依赖 infras 获取会话
+- **Models 层**：纯数据表映射
 - **Infra 层**：封装第三方客户端，**永不反向依赖上层**
 
 ### 2. 核心业务流程
@@ -224,38 +206,28 @@ flowchart TD
 
 ### 3. 模块依赖关系
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                              前端 (web)                                   │
-│                           Vue 3 应用                                      │
-└────────────────────────────────┬─────────────────────────────────────────┘
-                                 │ HTTP API
-┌────────────────────────────────▼─────────────────────────────────────────┐
-│                              后端 (server/src)                            │
-│                                                                          │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                      接口层 (api/routes)                           │   │
-│  │              chat.py │ approval.py │ health.py                   │   │
-│  └─────────────────────────────────┬──────────────────────────────────┘   │
-│                                    │                                      │
-│  ┌─────────────────────────────────▼──────────────────────────────────┐   │
-│  │                      业务逻辑层 (services)                         │   │
-│  │         ChatService │ ApprovalService │ WorkflowService           │   │
-│  └─┬───────────┬──────────────┬─────────────────┬──────────────────┘   │
-│    │           │              │                 │                       │
-│    ▼           ▼              ▼                 ▼                       │
-│  ┌────────┐ ┌────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │workflows│ │  llm   │ │ repositories│ │  schemas  │ │     core     │   │
-│  │  ⭐    │ │        │ │             │ │           │ │(config/logger│   │
-│  │        │ │        │ │             │ │           │ │ middleware)  │   │
-│  └────┬───┘ └────────┘ └──────┬──────┘ └───────────┘ └──────────────┘   │
-│       │                        │                                        │
-│       ▼                        ▼                                        │
-│  ┌────────────┐         ┌──────────────┐                               │
-│  │   tools    │         │  infras      │                               │
-│  │            │         │ mysql/redis   │                               │
-│  └────────────┘         └──────────────┘                               │
-└──────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    WEB["前端 (web)<br>Vue 3"] -->|"HTTP"| API
+
+    API["api/routes"] --> SVC
+    SVC["services"] --> WF
+    SVC --> LLM
+    SVC --> REPO
+    WF --> LLM
+    WF --> TOOLS
+    REPO --> MODELS
+    REPO --> INFRA
+
+    style WEB fill:#e1f5fe
+    style API fill:#fff3e0
+    style SVC fill:#fff3e0
+    style WF fill:#f3e5f5
+    style LLM fill:#e8f5e9
+    style REPO fill:#fce4ec
+    style MODELS fill:#fce4ec
+    style INFRA fill:#fce4ec
+    style TOOLS fill:#e8f5e9
 ```
 
 **依赖关系表**：
