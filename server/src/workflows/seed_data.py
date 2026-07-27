@@ -647,3 +647,120 @@ MULTI_AGENT_DEF = {
         ],
     },
 }
+
+
+# ========== 推理工作流 ==========
+
+REACT_DEF = {
+    "name": "react",
+    "description": "ReAct 推理工作流：Reasoning + Acting 交替循环，支持反思和工具调用",
+    "state_schema": {
+        "messages": "list",
+        "iteration": "int",
+        "max_iterations": "int",
+        "intermediate_steps": "list",
+        "error": "Optional[str]",
+        "session_id": "Optional[str]",
+        "should_continue": "bool",
+        "thought": "Optional[str]",
+        "action": "Optional[str]",
+        "observation": "Optional[str]",
+        "final_answer": "Optional[str]",
+    },
+    "graph_data": {
+        "entry_point": "reasoning",
+        "nodes": [
+            {"id": "reasoning", "type": "processor", "label": "推理", "position": {"x": 300, "y": 50}, "handler": "react_reasoning", "config": {}},
+            {"id": "action", "type": "processor", "label": "行动", "position": {"x": 300, "y": 200}, "handler": "react_action", "config": {}},
+            {"id": "observation", "type": "processor", "label": "观察", "position": {"x": 300, "y": 350}, "handler": "react_observation", "config": {}},
+            {"id": "reflect", "type": "processor", "label": "反思", "position": {"x": 500, "y": 200}, "handler": "react_reflection", "config": {}},
+            {"id": "finish", "type": "processor", "label": "结束", "position": {"x": 700, "y": 200}, "handler": "react_finish", "config": {}},
+        ],
+        "edges": [
+            {"id": "e-reasoning-action", "source": "reasoning", "target": "action", "type": "normal"},
+            {"id": "e-action-observation", "source": "action", "target": "observation", "type": "normal"},
+            {"id": "e-observation-reflect", "source": "observation", "target": "reflect", "type": "normal"},
+            {"id": "e-reflect-reasoning", "source": "reflect", "target": "reasoning", "type": "conditional", "condition": {"field": "should_continue", "operator": "==", "value": True}},
+            {"id": "e-reflect-finish", "source": "reflect", "target": "finish", "type": "conditional", "condition": {"field": "should_continue", "operator": "==", "value": False}},
+            {"id": "e-reasoning-finish", "source": "reasoning", "target": "finish", "type": "conditional", "condition": {"field": "error", "operator": "!=", "value": None}},
+            {"id": "e-finish-end", "source": "finish", "target": "__end__", "type": "normal"},
+        ],
+    },
+}
+
+
+PLAN_EXECUTE_DEF = {
+    "name": "plan_execute",
+    "description": "Plan-and-Execute 推理工作流：先规划后执行，支持重规划和反思",
+    "state_schema": {
+        "messages": "list",
+        "iteration": "int",
+        "max_iterations": "int",
+        "intermediate_steps": "list",
+        "error": "Optional[str]",
+        "session_id": "Optional[str]",
+        "plan": "list",
+        "pending_tasks": "list",
+        "completed_tasks": "list",
+        "current_step": "int",
+        "current_result": "Optional[str]",
+        "needs_replan": "bool",
+    },
+    "graph_data": {
+        "entry_point": "plan",
+        "nodes": [
+            {"id": "plan", "type": "processor", "label": "规划", "position": {"x": 200, "y": 50}, "handler": "plan_planner", "config": {}},
+            {"id": "executor", "type": "processor", "label": "执行", "position": {"x": 200, "y": 200}, "handler": "plan_executor", "config": {}},
+            {"id": "reflector", "type": "processor", "label": "反思", "position": {"x": 400, "y": 200}, "handler": "plan_reflector", "config": {}},
+            {"id": "replan", "type": "processor", "label": "重规划", "position": {"x": 600, "y": 200}, "handler": "plan_replan", "config": {}},
+            {"id": "finish", "type": "processor", "label": "结束", "position": {"x": 800, "y": 200}, "handler": "plan_finish", "config": {}},
+        ],
+        "edges": [
+            {"id": "e-plan-executor", "source": "plan", "target": "executor", "type": "normal"},
+            {"id": "e-executor-reflector", "source": "executor", "target": "reflector", "type": "normal"},
+            {"id": "e-reflector-executor", "source": "reflector", "target": "executor", "type": "conditional", "condition": {"field": "needs_replan", "operator": "==", "value": False}},
+            {"id": "e-reflector-replan", "source": "reflector", "target": "replan", "type": "conditional", "condition": {"field": "needs_replan", "operator": "==", "value": True}},
+            {"id": "e-replan-executor", "source": "replan", "target": "executor", "type": "normal"},
+            {"id": "e-reflector-finish", "source": "reflector", "target": "finish", "type": "conditional", "condition": {"field": "error", "operator": "!=", "value": None}},
+            {"id": "e-finish-end", "source": "finish", "target": "__end__", "type": "normal"},
+        ],
+    },
+}
+
+
+TOT_DEF = {
+    "name": "tot",
+    "description": "Tree-of-Thought 推理工作流：生成-评估-选择循环，动态探索多分支推理树",
+    "state_schema": {
+        "messages": "list",
+        "iteration": "int",
+        "max_iterations": "int",
+        "intermediate_steps": "list",
+        "error": "Optional[str]",
+        "session_id": "Optional[str]",
+        "depth": "int",
+        "max_depth": "int",
+        "branches": "list",
+        "new_branches": "list",
+        "evaluation_results": "list",
+        "evaluated_branches": "list",
+        "best_branch_id": "Optional[str]",
+    },
+    "graph_data": {
+        "entry_point": "generator",
+        "nodes": [
+            {"id": "generator", "type": "processor", "label": "生成分支", "position": {"x": 300, "y": 50}, "handler": "tot_generator", "config": {}},
+            {"id": "evaluator", "type": "processor", "label": "评估分支", "position": {"x": 300, "y": 200}, "handler": "tot_evaluator", "config": {}},
+            {"id": "selector", "type": "processor", "label": "选择分支", "position": {"x": 300, "y": 350}, "handler": "tot_selector", "config": {}},
+            {"id": "finish", "type": "processor", "label": "结束", "position": {"x": 600, "y": 200}, "handler": "tot_finish", "config": {}},
+        ],
+        "edges": [
+            {"id": "e-generator-evaluator", "source": "generator", "target": "evaluator", "type": "normal"},
+            {"id": "e-evaluator-selector", "source": "evaluator", "target": "selector", "type": "normal"},
+            {"id": "e-selector-generator", "source": "selector", "target": "generator", "type": "conditional", "condition": {"field": "error", "operator": "==", "value": None}},
+            {"id": "e-selector-finish", "source": "selector", "target": "finish", "type": "conditional", "condition": {"field": "error", "operator": "!=", "value": None}},
+            {"id": "e-finish-end", "source": "finish", "target": "__end__", "type": "normal"},
+        ],
+    },
+}
+

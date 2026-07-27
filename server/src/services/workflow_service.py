@@ -168,6 +168,9 @@ class WorkflowDefinitionService:
             RAG_QA_DEF,
             CUSTOMER_SERVICE_DEF,
             MULTI_AGENT_DEF,
+            REACT_DEF,
+            PLAN_EXECUTE_DEF,
+            TOT_DEF,
         )
         for definition in [
             INTENT_CLASSIFIER_DEF,
@@ -175,6 +178,9 @@ class WorkflowDefinitionService:
             RAG_QA_DEF,
             CUSTOMER_SERVICE_DEF,
             MULTI_AGENT_DEF,
+            REACT_DEF,
+            PLAN_EXECUTE_DEF,
+            TOT_DEF,
         ]:
             existing = await self._repository.get_by_name(definition["name"])
             if existing is None:
