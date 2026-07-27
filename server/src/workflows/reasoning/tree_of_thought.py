@@ -112,7 +112,7 @@ _GENERATOR_SYSTEM_PROMPT = """你是一个 Tree-of-Thought 思维探索专家。
 
 规则：
 1. 每个分支必须从不同角度思考问题，并保持逻辑连贯
-2. 分支数量应等于 num_branches；不同分支应互不重叠
+2. 分支数量应等于 {max_branches}；不同分支应互不重叠
 3. 若上轮 best_branch 提供思路，应在其基础上进行有意义的扩展
 4. 严格输出 JSON，不要包含 JSON 之外的解释文字
 """
@@ -309,15 +309,21 @@ def create_generator_node(config: ReasoningConfig) -> Callable[[ToTState], dict]
         user_query = _extract_user_query(state)
         prompt = (
             f"任务：{user_query or '（无）'}\n\n"
-            f"当前最佳分支推理：\n{best_content or '（首次生成，无前置分支）'}"
+            f"当前最佳分支推理：\n{best_content or '（首次生成，无前置分支）'}\n\n"
+            f"本轮请生成 {max_branches} 个不同的思考分支。"
         )
 
         # 调用 LLM 产出新分支
         try:
+            system_prompt = (
+                config.system_prompt
+                if config.system_prompt
+                else _GENERATOR_SYSTEM_PROMPT.format(max_branches=max_branches)
+            )
             provider = get_llm_provider(config.llm_provider)
             response = provider.invoke(
                 [
-                    SystemMessage(content=config.system_prompt or _GENERATOR_SYSTEM_PROMPT),
+                    SystemMessage(content=system_prompt),
                     HumanMessage(content=prompt),
                 ]
             )
