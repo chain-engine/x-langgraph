@@ -133,16 +133,6 @@ flowchart TB
 
 **Layer Dependency Rules**: `api → service → workflows/repositories → models/infras` (`core` referenced by all layers)
 
-**5 Typical Workflows**:
-
-| Type | File | Description |
-|------|------|-------------|
-| Intent Classification | `classify.py` | LLM intent classification + 6-category routing |
-| Smart Chatbot | `chatbot.py` | Multi-level routing + Checkpointer persistence |
-| RAG Q&A | `rag.py` | Vector retrieval + context building + LLM generation |
-| Multi-Agent Collaboration | `multi_agent.py` | Handoff mode + 5 roles collaboration |
-| Automated Approval | `approval.py` | Risk assessment + Human-in-the-Loop |
-
 ### 2. Core Business Flows
 
 #### Workflow Execution Flow
