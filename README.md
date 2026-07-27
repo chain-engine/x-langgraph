@@ -28,6 +28,258 @@
 
 ---
 
+## 项目结构
+
+```
+x-langgraph/
+├── server/                         # 后端 API 服务
+│   ├── src/
+│   │   ├── api/                   # API 接口层
+│   │   │   ├── routes/            # 路由模块
+│   │   │   └── router.py         # 路由注册
+│   │   ├── core/                  # 核心支撑层
+│   │   │   ├── config.py         # 配置管理
+│   │   │   ├── logger.py         # 日志
+│   │   │   ├── container.py      # IOC 容器
+│   │   │   └── middleware.py     # 中间件
+│   │   ├── services/              # 业务逻辑层
+│   │   │   ├── chat_service.py
+│   │   │   ├── approval_service.py
+│   │   │   └── workflow_service.py
+│   │   ├── repositories/         # 数据访问层
+│   │   │   └── workflow_repository.py
+│   │   ├── models/               # ORM 实体层
+│   │   ├── infras/              # 基础设施层
+│   │   │   ├── mysql.py
+│   │   │   ├── redis.py
+│   │   │   └── http_client.py
+│   │   ├── schemas/              # Pydantic Schema
+│   │   ├── llm/                 # LLM 提供者
+│   │   │   ├── base.py
+│   │   │   ├── deepseek.py
+│   │   │   ├── doubao.py
+│   │   │   └── aliyun.py
+│   │   ├── tools/               # 工具模块
+│   │   │   ├── weather/
+│   │   │   ├── search/
+│   │   │   └── calculation/
+│   │   └── workflows/           # 工作流模块 ⭐
+│   │       ├── base.py          # BaseWorkflow 基类
+│   │       ├── compiler.py      # 图编译器
+│   │       ├── checkpointer.py  # 状态持久化
+│   │       ├── reasoning/       # 推理模块
+│   │       │   ├── react.py
+│   │       │   ├── tree_of_thought.py
+│   │       │   └── plan_execute.py
+│   │       ├── intent_classifier/
+│   │       ├── customer_service/
+│   │       ├── rag_qa/
+│   │       ├── multi_agent/
+│   │       └── approval/
+│   ├── examples/                # 示例代码
+│   ├── tests/                   # 测试代码
+│   ├── data/                    # 工作流定义文件
+│   ├── Dockerfile
+│   └── docker-compose.yml
+│
+└── web/                         # 前端可视化界面（Vue 3）
+    ├── src/
+    │   ├── components/
+    │   │   ├── graph/           # 工作流画布
+    │   │   └── panels/         # 属性面板
+    │   ├── stores/             # Pinia 状态管理
+    │   ├── api/                # API 客户端
+    │   ├── views/              # 页面视图
+    │   └── router/
+    └── package.json
+```
+
+---
+
+## 系统架构
+
+### 1. 分层架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      API 接口层 (api)                            │
+│         chat.py │ approval.py │ health.py │ metrics.py           │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    业务逻辑层 (services)                          │
+│         ChatService │ ApprovalService │ WorkflowService          │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    数据访问层 (repositories)                       │
+│                    WorkflowRepository                            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+┌─────────────────┐ ┌───────────────┐ ┌──────────────────────┐
+│  ORM 实体层     │ │  基础设施层    │ │    核心支撑层         │
+│    (models)    │ │   (infras)    │ │      (core)          │
+│                │ │               │ │                      │
+│ Workflow Model │ │ MySQL Session │ │ config.py            │
+│                │ │ Redis Client │ │ logger.py            │
+│                │ │ HTTP Client  │ │ middleware.py         │
+│                │ │               │ │ container.py         │
+└─────────────────┘ └───────────────┘ └──────────────────────┘
+```
+
+**层间依赖规则**：
+
+```
+api → service → repository
+            repository → models
+            repository → infras
+```
+
+- **API 层**：参数接收、鉴权、转发调用，不含业务逻辑
+- **Service 层**：业务规则、事务编排、多仓储联动
+- **Repository 层**：封装 CRUD、多表查询，依赖 infras 获取会话
+- **Models 层**：纯数据表映射，无业务逻辑
+- **Infra 层**：封装第三方客户端，**永不反向依赖上层**
+
+### 2. 核心业务流程
+
+#### 工作流执行流程
+
+```mermaid
+flowchart TD
+    A[用户请求] --> B[API 接收]
+    B --> C{认证检查}
+    C -->|通过| D[Service 处理]
+    C -->|失败| E[返回 401]
+    D --> F{工作流存在?}
+    F -->|是| G[加载 Checkpointer]
+    F -->|否| H[返回 404]
+    G --> I{MySQL 可用?}
+    I -->|是| J[MySQL Checkpointer]
+    I -->|否| K[MemorySaver 降级]
+    J --> L[构建 StateGraph]
+    K --> L
+    L --> M[执行工作流]
+    M --> N{需要中断?}
+    N -->|是| O[interrupt 暂停]
+    N -->|否| P[返回结果]
+    O --> Q[等待外部恢复]
+    Q --> R[Command resume]
+    R --> M
+    P --> S[SSE 流式返回]
+```
+
+#### 智能客服完整流程
+
+```mermaid
+flowchart TD
+    START[用户消息] --> INTAKE[intake 节点]
+    INTAKE --> CLASSIFY[classify 节点]
+    CLASSIFY --> ROUTE{条件路由}
+    ROUTE -->|inquiry| INQUIRY[handle_inquiry]
+    ROUTE -->|complaint| COMPLAINT[handle_complaint]
+    ROUTE -->|technical| TECHNICAL[handle_technical]
+    ROUTE -->|billing| BILLING[handle_billing]
+    INQUIRY --> REVIEW[review 节点]
+    COMPLAINT --> REVIEW
+    TECHNICAL --> REVIEW
+    BILLING --> REVIEW
+    REVIEW --> END[返回结果]
+```
+
+#### 多智能体协作流程
+
+```mermaid
+flowchart TD
+    START[用户请求] --> COORD[coordinator 协调]
+    COORD --> ROUTER{handoff_router}
+    ROUTER -->|researcher| RESEARCH[researcher 研究]
+    ROUTER -->|writer| WRITE[writer 撰写]
+    ROUTER -->|editor| EDIT[edit 编辑]
+    ROUTER -->|reviewer| REVIEW[reviewer 审核]
+    RESEARCH --> ROUTER
+    WRITE --> ROUTER
+    EDIT --> ROUTER
+    REVIEW --> NEED{needs_revision?}
+    NEED -->|是| WRITE
+    NEED -->|否| END[最终输出]
+```
+
+### 3. 模块依赖关系
+
+```mermaid
+graph LR
+    subgraph "前端 (web)"
+        WEB[Vue 3 应用]
+    end
+
+    subgraph "后端 (server/src)"
+        subgraph "接口层"
+            API[api/routes]
+        end
+
+        subgraph "业务层"
+            SVC[services]
+        end
+
+        subgraph "数据层"
+            REPO[repositories]
+            MODELS[models]
+        end
+
+        subgraph "基础设施"
+            INFRA[infras]
+        end
+
+        subgraph "核心支撑"
+            CORE[core]
+        end
+
+        subgraph "工作流 ⭐"
+            WF[workflows]
+            WF --> BASE[base.py]
+            WF --> REASONING[reasoning/]
+            WF --> CHECKPOINT[checkpointer.py]
+        end
+
+        subgraph "LLM"
+            LLM[llm/]
+        end
+
+        subgraph "工具"
+            TOOLS[tools/]
+        end
+    end
+
+    API --> SVC
+    SVC --> REPO
+    REPO --> MODELS
+    REPO --> INFRA
+    SVC --> WF
+    SVC --> LLM
+    WF --> LLM
+    WF --> TOOLS
+    API -.-> CORE
+    SVC -.-> CORE
+    REPO -.-> CORE
+```
+
+**依赖说明**：
+
+| 层级 | 依赖关系 |
+|------|----------|
+| `workflows` | 依赖 `llm`、`tools`、`core/config` |
+| `services` | 依赖 `workflows`、`llm`、`repositories` |
+| `repositories` | 依赖 `models`、`infras/mysql` |
+| `api` | 依赖 `services`、`schemas` |
+| `core` | 被所有层级引用，但不反向依赖 |
+
+---
+
 ## 核心能力
 
 ### 1. 多种推理模式
@@ -39,18 +291,6 @@
 | **ReAct** | `react.py` | `reasoning → acting → observation → reflection` 循环 | 工具调用、搜索增强 |
 | **Tree-of-Thought** | `tree_of_thought.py` | `generate → evaluate → select → ...` 树搜索 | 创意生成、方案探索 |
 | **Plan-and-Execute** | `plan_execute.py` | `planner → executor → reflector → replan` | 复杂任务分解执行 |
-
-```
-ReAct 推理模式：
-START → reasoning → [FINISH?] → acting → observation → reflection
-         ↑                                              ↓
-         └────────────── (should_continue) ←─────────────┘
-
-Plan-and-Execute 规划执行：
-START → planner → executor → reflector → [needs_replan?] → replan
-                                          ↓
-                                    [完成] → finish
-```
 
 ### 2. 动态分支与条件路由
 
@@ -70,19 +310,11 @@ workflow.add_conditional_edges(
 
 ### 3. 状态持久化与断点恢复
 
-- MySQL Checkpointer：生产级状态持久化
-- 自动降级：MySQL 不可用时回退到 MemorySaver
-- Human-in-the-Loop：`interrupt` 中断 + `Command(resume)` 恢复
+- **MySQL Checkpointer**：生产级状态持久化
+- **自动降级**：MySQL 不可用时回退到 MemorySaver
+- **Human-in-the-Loop**：`interrupt` 中断 + `Command(resume)` 恢复
 
 ### 4. 多智能体协作
-
-```
-coordinator → researcher → writer → editor → reviewer
-                                        ↓
-                              [需要修订] → writer
-                                    ↓
-                              [通过] → END
-```
 
 支持 Handoff 模式、并行任务、工具调用。
 
@@ -90,7 +322,7 @@ coordinator → researcher → writer → editor → reviewer
 
 ## 工作流示例
 
-本框架内置 **5 种典型工作流**，覆盖智能客服、RAG 问答、多智能体协作等核心场景：
+本框架内置 **5 种典型工作流**：
 
 ### 1. 意图分类路由
 
@@ -149,41 +381,6 @@ START → submit → evaluate → [风险评估路由]
                           └→ human_approval → [interrupt] → notify → END
 ```
 **特点**：自动评估 + 风险评估 + Human-in-the-Loop + 通知发送
-
----
-
-## 项目结构
-
-```
-x-langgraph/
-├── server/                         # 后端 API 服务
-│   ├── src/
-│   │   ├── api/                   # API 接口层
-│   │   ├── services/              # 业务逻辑层
-│   │   ├── workflows/             # 工作流模块 ⭐
-│   │   │   ├── base.py            # BaseWorkflow 基类
-│   │   │   ├── compiler.py        # 图编译器
-│   │   │   ├── checkpointer.py    # 状态持久化
-│   │   │   ├── reasoning/         # 推理模块 ⭐
-│   │   │   │   ├── react.py       # ReAct 模式
-│   │   │   │   ├── tree_of_thought.py  # ToT 模式
-│   │   │   │   └── plan_execute.py     # Plan 模式
-│   │   │   ├── intent_classifier/ # 意图分类
-│   │   │   ├── customer_service/   # 智能客服
-│   │   │   ├── rag_qa/            # RAG 问答
-│   │   │   ├── multi_agent/       # 多智能体
-│   │   │   └── approval/          # 审批流程
-│   │   ├── llm/                   # LLM 提供者
-│   │   └── tools/                 # 工具模块
-│   ├── examples/                   # 示例代码
-│   └── tests/                     # 测试代码
-│
-└── web/                           # 前端可视化界面（Vue 3）
-    ├── src/
-    │   ├── components/graph/       # 工作流画布组件
-    │   └── views/                 # 页面视图
-    └── package.json
-```
 
 ---
 
