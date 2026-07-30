@@ -2,7 +2,7 @@
 """
 ReAct (Reasoning + Acting) 模式
 
-实现经典的 ReAct 推理循环：思考（Reasoning）→ 行动（Action）→ 观察（Observation）→ 反思（Reflection），
+实现经典的 ReAct 推理循环：思考（Reasoning） /Thought（思考）） → 行动（Action）→ 观察（Observation）→ 反思（Reflection），
 直到满足结束条件或达到最大迭代次数。
 
 工作流：

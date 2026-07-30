@@ -10,6 +10,7 @@ import json
 from typing import Any, Optional, AsyncGenerator
 
 from .base import Service
+from constants.enums import ReasoningMode
 from repositories.workflow_repository import WorkflowRepository
 from repositories.workflow_definition_repository import WorkflowDefinitionRepository
 from workflows.compiler import compile_workflow
@@ -158,7 +159,7 @@ class ChatService(Service):
 
                 request = self._build_approval_request(message, session_id)
                 result = await ApprovalWorkflow().arun(request, session_id)
-            elif workflow_name in ("react", "plan_execute", "tot"):
+            elif workflow_name in ReasoningMode.get_all_marks():
                 result = await self._execute_reasoning_workflow(workflow_name, message, session_id, reasoning_config)
             else:
                 # 动态路径：从 DB 查询工作流定义，通过 compiler 编译执行
@@ -210,7 +211,23 @@ class ChatService(Service):
         session_id: str,
         config_dict: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        """执行推理工作流（react / plan_execute / tot）"""
+        """
+        执行推理工作流（react / plan_execute / tot）
+
+        三种推理模式的区别：
+        - react: ReAct 模式，推理 → 行动 → 观察循环，适合工具调用场景
+        - plan_execute: Plan-and-Execute 模式，先规划步骤再执行，适合复杂多步骤任务
+        - tot: Tree-of-Thoughts 模式，多分支搜索探索最优解，适合开放式问题
+
+        Args:
+            mode: 推理模式标识（react | plan_execute | tot）
+            message: 用户输入消息
+            session_id: 会话 ID，用于 LLM 记忆
+            config_dict: 可选配置，包含 max_iterations、timeout_seconds 等
+
+        Returns:
+            包含 final_answer 的结果字典
+        """
         from workflows.reasoning.base import ReasoningConfig
         from workflows.reasoning import ReactWorkflow, create_plan_execute_workflow, create_tot_workflow
 
@@ -222,6 +239,7 @@ class ChatService(Service):
             system_prompt=config_dict.get("system_prompt"),
         )
 
+        # 初始化状态：包含消息历史、迭代计数器、中间步骤等
         state: dict[str, Any] = {
             "messages": [{"role": "user", "content": message}],
             "iteration": 0,
@@ -231,20 +249,26 @@ class ChatService(Service):
             "session_id": session_id,
         }
 
+        # 根据推理模式选择并初始化对应的工作流
+        # - ReactWorkflow: ReAct 模式，内置 graph 属性，直接实例化使用
+        # - create_plan_execute_workflow: 返回上下文管理器，需调用 __enter__ 获取 workflow 实例
+        # - create_tot_workflow: 同上，且需要额外初始化树搜索相关状态（depth、max_depth、branches）
         if mode == "react":
             workflow = ReactWorkflow(config=cfg)
             graph = workflow.graph
         elif mode == "plan_execute":
+            # Plan-and-Execute 模式：先规划再执行，支持执行过程中重规划
             wf = create_plan_execute_workflow(config=cfg)
-            workflow = wf.__enter__()
+            workflow = wf.__enter__()  # 进入上下文，初始化 planner 和 executor
             graph = workflow.graph
         elif mode == "tot":
+            # Tree-of-Thoughts 模式：多分支搜索，需要初始化树的深度和分支状态
             wf = create_tot_workflow(config=cfg)
             workflow = wf.__enter__()
             graph = workflow.graph
-            state["depth"] = 0
-            state["max_depth"] = config_dict.get("max_depth", 5) if config_dict else 5
-            state["branches"] = []
+            state["depth"] = 0  # 当前探索深度
+            state["max_depth"] = config_dict.get("max_depth", 5) if config_dict else 5  # 最大探索深度
+            state["branches"] = []  # 存储探索过的分支路径
             state["new_branches"] = []
             state["evaluation_results"] = []
             state["evaluated_branches"] = []
@@ -301,8 +325,8 @@ class ChatService(Service):
             dict: 流式事件
         """
         try:
-            # 推理工作流走独立流式路径
-            if workflow_name in ("react", "plan_execute", "tot"):
+            # 推理工作流（react/plan_execute/tot）走独立流式路径，通过专门的流式处理器执行
+            if workflow_name in ReasoningMode.get_all_marks():
                 async for event in self._stream_reasoning_workflow(
                     workflow_name, message, session_id, reasoning_config
                 ):
@@ -348,7 +372,21 @@ class ChatService(Service):
         session_id: str,
         config_dict: Optional[dict[str, Any]] = None,
     ) -> AsyncGenerator[dict, None]:
-        """流式执行推理工作流"""
+        """
+        流式执行推理工作流
+
+        与 _execute_reasoning_workflow 类似，但通过 astream 实时 yield 每一步的中间结果，
+        实现打字机效果的流式输出。ToT 模式额外维护了分支评估相关状态。
+
+        Args:
+            mode: 推理模式（react | plan_execute | tot）
+            message: 用户消息
+            session_id: 会话 ID
+            config_dict: 可选配置，包含 max_iterations、max_depth 等
+
+        Yields:
+            流式事件字典，格式为 {"event": "xxx", "data": {...}}
+        """
         from workflows.reasoning.base import ReasoningConfig
         from workflows.reasoning import ReactWorkflow, create_plan_execute_workflow, create_tot_workflow
 
@@ -360,6 +398,7 @@ class ChatService(Service):
             system_prompt=config_dict.get("system_prompt"),
         )
 
+        # 初始化状态（与 _execute_reasoning_workflow 相同）
         state: dict[str, Any] = {
             "messages": [{"role": "user", "content": message}],
             "iteration": 0,
@@ -369,6 +408,8 @@ class ChatService(Service):
             "session_id": session_id,
         }
 
+        # 根据模式选择工作流（与 _execute_reasoning_workflow 相同逻辑）
+        # ToT 模式需要额外的树搜索状态用于流式输出中的分支评估展示
         if mode == "react":
             workflow = ReactWorkflow(config=cfg)
             graph = workflow.graph
@@ -377,6 +418,7 @@ class ChatService(Service):
             workflow = wf.__enter__()
             graph = workflow.graph
         elif mode == "tot":
+            # Tree-of-Thoughts：维护分支探索相关状态，用于流式输出展示探索进度
             wf = create_tot_workflow(config=cfg)
             workflow = wf.__enter__()
             graph = workflow.graph
