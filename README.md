@@ -440,11 +440,16 @@ result = workflow.run("帮我分析竞争对手并制定营销策略")
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/chat` | POST | 聊天对话 |
-| `/chat/stream` | POST | 流式聊天 |
-| `/workflows/{name}/execute` | POST | 执行工作流 |
-| `/workflows/{name}/stream` | POST | 流式执行 |
-| `/approval/resume` | POST | 恢复审批 |
+| `/v1/chat/execute` | POST | 聊天对话 |
+| `/v1/chat/stream` | POST | 流式聊天 |
+| `/v1/workflows` | GET | 列出工作流 |
+| `/v1/workflows/{name}` | GET/POST/PUT/DELETE | 工作流 CRUD |
+| `/v1/workflows/{name}/nodes` | POST/PUT/DELETE | 节点 CRUD |
+| `/v1/workflows/{name}/edges` | POST/PUT/DELETE | 边 CRUD |
+| `/v1/workflows/{name}/execute` | POST | 执行工作流 |
+| `/v1/workflows/{name}/stream` | POST | 流式执行 |
+| `/v1/approval/resume` | POST | 恢复审批 |
+| `/v1/approval/status/{session_id}` | GET | 审批状态 |
 
 ---
 
