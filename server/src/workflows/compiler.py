@@ -147,9 +147,11 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None) -> CompiledS
     Returns:
         编译后的 StateGraph
     """
+    # ==== Step 1: 注册并查找节点处理函数 ====
     if not HANDLER_REGISTRY:
         _register_handlers()
 
+    # ==== Step 2: 解析工作流定义（节点、边、入口点、状态结构） ====
     graph_data = definition.get("graph_data", {})
     nodes = graph_data.get("nodes", [])
     edges = graph_data.get("edges", [])
@@ -159,10 +161,11 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None) -> CompiledS
     if not state_schema:
         state_schema = {"input": "str", "output": "str", "error": "Optional[str]"}
 
+    # ==== Step 3: 动态构造状态类（TypedDict） ====
     StateClass = _get_state_class(state_schema)
     workflow = StateGraph(StateClass)
 
-    # 添加节点
+    # ==== Step 4: 向图中添加节点 ====
     for node_def in nodes:
         node_id = node_def["id"]
         handler_name = node_def.get("handler", node_id)
@@ -173,13 +176,13 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None) -> CompiledS
         workflow.add_node(node_id, handler)
         logger.debug(f"Added node: {node_id} (handler: {handler_name})")
 
-    # 设置入口点
+    # ==== Step 5: 设置入口点 ====
     if entry_point:
         workflow.set_entry_point(entry_point)
     elif nodes:
         workflow.set_entry_point(nodes[0]["id"])
 
-    # 添加边
+    # ==== Step 6: 解析并添加边（区分普通边和条件边） ====
     conditional_map: dict[str, dict[str, str]] = {}
     conditional_default: dict[str, str] = {}
     conditional_field: dict[str, str] = {}
@@ -209,7 +212,7 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None) -> CompiledS
                 workflow.add_edge(source, target)
             logger.debug(f"Added edge: {source} -> {target}")
 
-    # 添加条件边
+    # ==== Step 7: 向图中添加条件边 ====
     for source, mapping in conditional_map.items():
         if "__end__" in mapping:
             mapping["__end__"] = END
@@ -226,6 +229,7 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None) -> CompiledS
         workflow.add_conditional_edges(source, route_fn, mapping)
         logger.debug(f"Added conditional edges from {source}: {mapping}, default: {default_target}")
 
+    # ==== Step 8: 编译图（绑定 checkpointer） ====
     cp = checkpointer or MemorySaver()
     compiled = workflow.compile(checkpointer=cp)
     logger.info(f"Workflow compiled: {definition.get('name', 'unknown')}")

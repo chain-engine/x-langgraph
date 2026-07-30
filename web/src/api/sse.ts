@@ -15,7 +15,7 @@ export function streamWorkflow(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (apiKey) headers['X-API-Key'] = apiKey
 
-  fetch(`/workflows/${encodeURIComponent(name)}/stream`, {
+  fetch(`/v1/workflows/${encodeURIComponent(name)}/stream`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ message, session_id: sessionId }),

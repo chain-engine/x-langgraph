@@ -20,10 +20,10 @@ export interface ChatStreamEvent {
 
 export const chatApi = {
   chat: (request: ChatRequest): Promise<ChatResponse> =>
-    http.post<ChatResponse>('/chat/execute', request),
+    http.post<ChatResponse>('/v1/chat/execute', request),
 
   stream: (request: ChatRequest): Promise<Response> =>
-    fetch('/chat/stream', {
+    fetch('/v1/chat/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

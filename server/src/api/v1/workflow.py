@@ -22,7 +22,7 @@ from core.logger import logger
 from core.container import container
 from services.workflow_service import WorkflowDefinitionService
 
-router = APIRouter(prefix="/workflows", tags=["workflows"])
+router = APIRouter(prefix="/v1/workflows", tags=["workflows"])
 
 
 @router.get("", response_model=list[WorkflowSummary])

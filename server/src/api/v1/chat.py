@@ -17,7 +17,7 @@ from core.logger import logger
 from core.container import container
 from services.chat_service import ChatService
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(prefix="/v1/chat", tags=["chat"])
 
 
 @router.post("/execute", response_model=ChatResponse)

@@ -13,7 +13,7 @@ from core.logger import logger
 from core.container import container
 from services.approval_service import ApprovalService
 
-router = APIRouter(prefix="/approval", tags=["approval"])
+router = APIRouter(prefix="/v1/approval", tags=["approval"])
 
 
 @router.post("/resume", response_model=ApprovalResponse)

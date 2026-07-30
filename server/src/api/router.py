@@ -7,7 +7,7 @@ API 路由管理
 
 from fastapi import APIRouter, Depends
 
-from api.routes import chat, approval, health, metrics, workflow
+from api.v1 import chat, approval, health, metrics, workflow
 from core.security import verify_api_key, rate_limit
 
 
