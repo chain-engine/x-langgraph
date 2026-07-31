@@ -3,6 +3,7 @@
 图编译器
 
 将 JSON 工作流定义编译为 LangGraph StateGraph。
+支持普通节点和 Agent 节点（通过 factory 动态创建）。
 """
 
 from typing import Any, Callable
@@ -15,6 +16,9 @@ from core.logger import logger
 
 # Handler 映射表：handler 标识 → Python 处理函数
 HANDLER_REGISTRY: dict[str, Callable] = {}
+
+# Agent 节点映射表：节点名称 → Agent 配置（延迟创建）
+AGENT_NODES: dict[str, dict] = {}
 
 
 def _register_handlers():
@@ -168,13 +172,31 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None) -> CompiledS
     # ==== Step 4: 向图中添加节点 ====
     for node_def in nodes:
         node_id = node_def["id"]
-        handler_name = node_def.get("handler", node_id)
-        handler = HANDLER_REGISTRY.get(handler_name)
-        if handler is None:
-            logger.warning(f"Handler not found for node '{node_id}': '{handler_name}', using passthrough")
-            handler = _passthrough_handler
+        node_type = node_def.get("type", "processor")  # 默认普通节点
+
+        if node_type == "agent":
+            # Agent 节点：动态创建
+            agent_config = node_def.get("config", {})
+            agent_config["name"] = node_id  # 使用节点 ID 作为名称
+
+            try:
+                from agent.factory import create_agent_node_from_config
+                agent_result = create_agent_node_from_config(agent_config)
+                handler = agent_result["node"]
+                logger.info(f"Created Agent node: {node_id}")
+            except Exception as e:
+                logger.error(f"Failed to create Agent node '{node_id}': {e}")
+                handler = _error_handler(f"Agent creation failed: {e}")
+        else:
+            # 普通节点：查找 handler
+            handler_name = node_def.get("handler", node_id)
+            handler = HANDLER_REGISTRY.get(handler_name)
+            if handler is None:
+                logger.warning(f"Handler not found for node '{node_id}': '{handler_name}', using passthrough")
+                handler = _passthrough_handler
+
         workflow.add_node(node_id, handler)
-        logger.debug(f"Added node: {node_id} (handler: {handler_name})")
+        logger.debug(f"Added node: {node_id} (type: {node_type}, handler: {node_def.get('handler', node_id)})")
 
     # ==== Step 5: 设置入口点 ====
     if entry_point:
@@ -239,6 +261,16 @@ def compile_workflow(definition: dict[str, Any], checkpointer=None) -> CompiledS
 def _passthrough_handler(state: dict) -> dict:
     """透传 handler（当找不到对应处理函数时使用）"""
     return {"output": state.get("input", ""), "error": None}
+
+
+def _error_handler(error_msg: str) -> Callable:
+    """错误处理 handler"""
+
+    def error_node(state: dict) -> dict:
+        logger.error(f"Error node triggered: {error_msg}")
+        return {"error": error_msg}
+
+    return error_node
 
 
 def _make_route_fn(field_name: str, allowed_values=None, default_target=None):

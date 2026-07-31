@@ -6,13 +6,12 @@
 API层只做接口注册和转发，具体业务逻辑由Service层处理
 """
 
-import json
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from schemas.chat import ChatRequest, ChatResponse, StreamEvent, ReasoningConfigRequest
+from schemas.chat import ChatRequest, ChatResponse, StreamEvent
 from core.logger import logger
 from core.container import container
 from services.chat_service import ChatService
@@ -69,7 +68,6 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 request.workflow,
                 request.message,
                 request.session_id,
-                reasoning_config=request.reasoning,
             ):
                 stream_event = StreamEvent(
                     event=event.get("event", "node_update"),
