@@ -5,29 +5,11 @@ Agent 基类和接口定义
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-
-class AgentType(str, Enum):
-    """Agent 类型枚举"""
-
-    REACT = "react"  # ReAct Agent
-    PLAN_EXECUTE = "plan_execute"  # Plan-and-Execute Agent
-    REFLEXION = "reflexion"  # Reflexion Agent
-
-
-class AgentStatus(str, Enum):
-    """Agent 运行状态"""
-
-    IDLE = "idle"
-    RUNNING = "running"
-    WAITING_TOOL = "waiting_tool"  # 等待工具执行
-    FINISHED = "finished"
-    ERROR = "error"
-    MAX_ITERATIONS = "max_iterations"  # 达到最大迭代次数
+from constants import AgentStatus, AgentType
 
 
 @dataclass

@@ -18,6 +18,12 @@ from core.config import settings
 from core.logger import logger
 
 
+def _message_content(message: object) -> str:
+    if isinstance(message, dict):
+        return str(message.get("content", ""))
+    return str(getattr(message, "content", message))
+
+
 # ========== 意图分类节点 ==========
 
 INTENT_SYSTEM_PROMPT = """你是一个智能客服意图分类器。根据用户输入判断客户意图，只返回最匹配的一个类别。
@@ -47,7 +53,7 @@ def classify_intent_node(state: IntentClassifierState) -> dict:
     """
     messages = state.get("messages", [])
     last = messages[-1] if messages else {}
-    user_input = last.get("content", "") if isinstance(last, dict) else str(last)
+    user_input = _message_content(last)
     logger.info(f"意图分类: {user_input}")
 
     if _has_valid_api_key():
@@ -73,7 +79,7 @@ def classify_intent_node(state: IntentClassifierState) -> dict:
 def handle_product_inquiry_node(state: IntentClassifierState) -> dict:
     """产品咨询处理节点"""
     messages = state.get("messages", [])
-    user_input = messages[-1].get("content", "") if messages else ""
+    user_input = _message_content(messages[-1]) if messages else ""
     return {
         "output": (
             "感谢您的产品咨询！我们的产品具有以下核心优势：\n"
@@ -88,7 +94,7 @@ def handle_product_inquiry_node(state: IntentClassifierState) -> dict:
 def handle_order_status_node(state: IntentClassifierState) -> dict:
     """订单状态查询处理节点"""
     messages = state.get("messages", [])
-    user_input = messages[-1].get("content", "") if messages else ""
+    user_input = _message_content(messages[-1]) if messages else ""
     return {
         "output": (
             "正在为您查询订单状态...\n\n"
@@ -101,7 +107,7 @@ def handle_order_status_node(state: IntentClassifierState) -> dict:
 def handle_technical_support_node(state: IntentClassifierState) -> dict:
     """技术支持处理节点（需要人工审批）"""
     messages = state.get("messages", [])
-    user_input = messages[-1].get("content", "") if messages else ""
+    user_input = _message_content(messages[-1]) if messages else ""
     state_approved = state.get("approved")
 
     if state_approved is None:
@@ -147,7 +153,7 @@ def handle_technical_support_node(state: IntentClassifierState) -> dict:
 def handle_complaint_node(state: IntentClassifierState) -> dict:
     """投诉处理节点"""
     messages = state.get("messages", [])
-    user_input = messages[-1].get("content", "") if messages else ""
+    user_input = _message_content(messages[-1]) if messages else ""
     return {
         "output": (
             "非常抱歉给您带来了不好的体验。\n\n"
@@ -161,7 +167,7 @@ def handle_complaint_node(state: IntentClassifierState) -> dict:
 def handle_billing_node(state: IntentClassifierState) -> dict:
     """账单问题处理节点"""
     messages = state.get("messages", [])
-    user_input = messages[-1].get("content", "") if messages else ""
+    user_input = _message_content(messages[-1]) if messages else ""
     return {
         "output": (
             "关于您的账单疑问，以下是常见处理方式：\n"
@@ -176,7 +182,7 @@ def handle_billing_node(state: IntentClassifierState) -> dict:
 def handle_other_node(state: IntentClassifierState) -> dict:
     """其他/闲聊处理节点"""
     messages = state.get("messages", [])
-    user_input = messages[-1].get("content", "") if messages else ""
+    user_input = _message_content(messages[-1]) if messages else ""
     return {
         "output": (
             f"感谢您的来信！关于「{user_input}」，"

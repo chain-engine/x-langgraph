@@ -10,7 +10,8 @@ from typing import Optional
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 
-from agent.base import AgentConfig, AgentType
+from agent.base import AgentConfig
+from constants import AgentType
 from agent.react_agent import create_react_agent_node, ReactAgentConfig
 from agent.registry import get_agent_registry
 from agent.tools import get_tool_registry

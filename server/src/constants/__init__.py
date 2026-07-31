@@ -36,7 +36,7 @@ from .develop import (
     ENCODING_BASE64,
     ENCODING_HEX,
 )
-from .enums import Environment
+from .enums import Environment, AgentType, AgentStatus
 
 __all__ = [
     "STREAM_MODE_UPDATES",
@@ -73,4 +73,6 @@ __all__ = [
     "ENCODING_BASE64",
     "ENCODING_HEX",
     "Environment",
+    "AgentType",
+    "AgentStatus",
 ]

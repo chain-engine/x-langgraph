@@ -95,13 +95,6 @@ class IntentClassifierWorkflow(BaseWorkflow):
         checkpointer = self.checkpointer or MemorySaver()
         return workflow.compile(checkpointer=checkpointer)
 
-    async def arun(self, user_input: str, thread_id: str = "default") -> dict:
-        """异步运行意图分类工作流的便捷方法"""
-        return await self.ainvoke(
-            {"messages": [{"role": "user", "content": user_input}]},
-            config={"configurable": {"thread_id": thread_id}},
-        )
-
     @staticmethod
     def _route_by_intent(state: IntentClassifierState) -> str:
         return state.get("intent", "other")

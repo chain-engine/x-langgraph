@@ -7,7 +7,8 @@ Agent 注册表
 
 from typing import Optional
 
-from agent.base import BaseAgent, AgentConfig, AgentType
+from agent.base import BaseAgent, AgentConfig
+from constants import AgentType
 
 
 class AgentRegistry:

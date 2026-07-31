@@ -136,7 +136,10 @@ class ChatService(Service):
             if workflow_name == "intent_classifier":
                 from workflows.intent_classifier.workflow import IntentClassifierWorkflow
 
-                result = await IntentClassifierWorkflow().arun(message, session_id)
+                result = await IntentClassifierWorkflow().ainvoke(
+                    {"messages": [{"role": "user", "content": message}]},
+                    config={"configurable": {"thread_id": session_id}},
+                )
             elif workflow_name == "customer_service":
                 from workflows.customer_service.workflow import CustomerServiceWorkflow
 
@@ -164,7 +167,10 @@ class ChatService(Service):
                     logger.warning(f"Unknown workflow '{workflow_name}', falling back to intent_classifier")
                     from workflows.intent_classifier.workflow import IntentClassifierWorkflow
 
-                    result = await IntentClassifierWorkflow().arun(message, session_id)
+                    result = await IntentClassifierWorkflow().ainvoke(
+                    {"messages": [{"role": "user", "content": message}]},
+                    config={"configurable": {"thread_id": session_id}},
+                )
 
             return self._normalize_workflow_result(result)
         except ImportError as e:
@@ -234,7 +240,7 @@ class ChatService(Service):
 
                 workflow = IntentClassifierWorkflow()
                 event_source = workflow.astream(
-                    message,
+                    {"messages": [{"role": "user", "content": message}]},
                     config={"configurable": {"thread_id": session_id}},
                 )
 
